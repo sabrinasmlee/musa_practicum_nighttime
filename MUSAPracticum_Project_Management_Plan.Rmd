@@ -1,0 +1,50 @@
+---
+title: "musa_practicum_projectmgmtplan"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Use Case
+
+How does the number and location of permits/licenses issued by the city impact visitors’ trips to bars and nightlife establishments? How does the number and location of permits/licenses issued by the city impact the negative externalities associated with nightlife?
+
+A tool like this could help community groups and councils quickly perform cost benefit analyses to make data-driven decisions regarding the issuance of permits and licenses for nightlife establishments to support a rational planning process. It would allow stakeholders to balance expansion of Philadelphia’s nightlife economy (to promote cultural and economic recovery) against the potential negative impacts of nightlife such as noise or public safety hazards.
+
+
+## Exploratory Analysis Questions 
+
+### Safegraph data
+- Number of visits/visitors?  Time of day? Season? Day of the week?
+- How far are people travelling from home?
+- Where does nightlife happen?
+- Where are the major corridors?
+- What is the Median dwell time? 
+- Is the data broken down into bars vs. restaurants or full-service vs. limited service?
+- How does traffic behave leading up to the 2am establishment closing time?
+
+### 3-1-1 data
+- What categories of 311 complaints are relevant for our analysis?
+- What is the relationship between location of bars and the nuisance?
+- Do 311 reports have a time stamp? Is there a delay between when a nuisance is caused and when it would be recorded?
+
+### Crime data
+- What categories of crime are relevant for our analysis?
+- What is the relationship between location of bars and crime incidents?
+
+### Qualitative data
+- Understand how the license/permit works.
+- Are there any days that we have data for where bar hours were different from normal?
+- Are there any parts of the city that have different bar hours?
+
+## Team Roles 
+- Project Management: Brian/ Sabrina 
+- Qualitative research / Policy Recommendations:  Maddy
+- Exploratory Data: Maddy (All)
+- Model Building: Maddy
+- App development: Sabrina/Brian
+- Report: All
+
+
