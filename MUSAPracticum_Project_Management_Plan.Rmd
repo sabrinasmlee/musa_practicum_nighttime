@@ -59,5 +59,4 @@ This tool will help community groups and councils quickly perform cost benefit a
 * Report: All
 
 ## Gantt Chart
-* https://docs.google.com/spreadsheets/d/1TqOA_ZhSJCTO_T8JtJFXPSdrvpe0CAXUcXq0nW63vO4/edit#gid=0
 Link to chart [here](https://docs.google.com/spreadsheets/d/1TqOA_ZhSJCTO_T8JtJFXPSdrvpe0CAXUcXq0nW63vO4/edit?usp=sharing).
