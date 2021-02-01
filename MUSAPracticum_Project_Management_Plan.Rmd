@@ -1,5 +1,5 @@
 ---
-title: "musa_practicum_projectmgmtplan"
+title: "MUSA Practicum Project Management Plan"
 output: html_document
 ---
 
@@ -17,34 +17,47 @@ A tool like this could help community groups and councils quickly perform cost b
 ## Exploratory Analysis Questions 
 
 ### Safegraph data
-- Number of visits/visitors?  Time of day? Season? Day of the week?
-- How far are people travelling from home?
-- Where does nightlife happen?
-- Where are the major corridors?
-- What is the Median dwell time? 
-- Is the data broken down into bars vs. restaurants or full-service vs. limited service?
-- How does traffic behave leading up to the 2am establishment closing time?
+* Number of visits/visitors?  Time of day? Season? Day of the week?
+* How far are people travelling from home?
+* Where does nightlife happen?
+* Where are the major corridors?
+* How long do people spend in establishments? What is the median dwell time by establishment? 
+* Is the data broken down into bars vs. restaurants or full-service vs. limited service?
+* How does traffic behave leading up to the 2am establishment closing time?
+* _The current Safegraph dataset that we have available does not include xy coordinates of the establishments or the business categories. These would both be immensly helpful in answering the above questions. Reach out to Andrew about Safegraph's POI dataset?_
 
 ### 3-1-1 data
-- What categories of 311 complaints are relevant for our analysis?
-- What is the relationship between location of bars and the nuisance?
-- Do 311 reports have a time stamp? Is there a delay between when a nuisance is caused and when it would be recorded?
+* What categories of 311 complaints are relevant for our analysis?
+* Are there spatial patterns to the relevant 3-1-1 complaints? 
+* Are there time patterns to the relevant 3-1-1 complaints?
+* What is the relationship between location of bars and the nuisance?
+* Do 3-1-1 reports have a time stamp? Is there a delay between when a nuisance is caused and when it would be recorded?
 
 ### Crime data
-- What categories of crime are relevant for our analysis?
-- What is the relationship between location of bars and crime incidents?
+* What categories of crime are relevant for our analysis?
+* Are there spatial patterns to the relevant crimes? 
+* Are there time patterns to the relevant crimes?
+* What is the relationship between location of bars and crime incidents?
 
 ### Qualitative data
-- Understand how the license/permit works.
-- Are there any days that we have data for where bar hours were different from normal?
-- Are there any parts of the city that have different bar hours?
+* How does the license/permit process work?
+* How many licenses are currently issued to nightlife establishments in Philadelphia and in the nightlife corridors that we identify?
+* What data is used to issue licenses/permits?
+* Has the process around issuing licenses/permits changed over time? If so, when and how?
+* Are there any days that we have data for where bar hours were different from normal?
+* Are there any parts of the city that have different bar hours?
+* How does the community provide feedback on nightlife? Is this part of the permitting process? 
+* What are alternative models for governing the nightlife permitting process?
+* How has the COVID pandemic impacted nightlife in Philadelphia?
 
 ## Team Roles 
-- Project Management: Brian/ Sabrina 
-- Qualitative research / Policy Recommendations:  Maddy
-- Exploratory Data: Maddy (All)
-- Model Building: Maddy
-- App development: Sabrina/Brian
-- Report: All
+* Project Management: Brian/ Sabrina 
+* Qualitative Research / Policy Recommendations:  Maddy
+* Exploratory Data: Maddy (All)
+* Model Building: All
+* App Development: Sabrina/Brian
+* Report: All
 
+## Gantt Chart
 
+Link to chart [here](https://docs.google.com/spreadsheets/d/1TqOA_ZhSJCTO_T8JtJFXPSdrvpe0CAXUcXq0nW63vO4/edit?usp=sharing).
