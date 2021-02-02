@@ -1,147 +1,87 @@
-#Nightlife
+#SAFEGRAPH EXPLORATORY ANALYSIS
+#MUSA Practicum
 
 ########
 # SETUP
 ########
 
 library(tidyverse)
-library(tidycensus)
 library(sf)
-library(kableExtra)
-library(sp)
-library(rgdal) 
-#library(timeDate)
-#install.packages("datetime")
-library(datetime)
 library(lubridate)
+library(datetime)
 
-options(scipen=999)
-options(tigris_class = "sf")
-
-# ---- Load Styling options -----
-
-mapTheme <- function(base_size = 12) {
-  theme(
-    text = element_text( color = "black"),
-    plot.title = element_text(size = 16,colour = "black"),
-    plot.subtitle=element_text(face="italic"),
-    plot.caption=element_text(hjust=0),
-    axis.ticks = element_blank(),
-    panel.background = element_blank(),axis.title = element_blank(),
-    axis.text = element_blank(),
-    axis.title.x = element_blank(),
-    axis.title.y = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.border = element_rect(colour = "black", fill=NA, size=2),
-    strip.text.x = element_text(size = 14))
-}
-
-plotTheme <- function(base_size = 12) {
-  theme(
-    text = element_text( color = "black"),
-    plot.title = element_text(size = 16,colour = "black"),
-    plot.subtitle = element_text(face="italic"),
-    plot.caption = element_text(hjust=0),
-    axis.ticks = element_blank(),
-    panel.background = element_blank(),
-    panel.grid.major = element_line("grey80", size = 0.1),
-    panel.grid.minor = element_blank(),
-    panel.border = element_rect(colour = "black", fill=NA, size=2),
-    strip.background = element_rect(fill = "grey80", color = "white"),
-    strip.text = element_text(size=12),
-    axis.title = element_text(size=12),
-    axis.text = element_text(size=10),
-    plot.background = element_blank(),
-    legend.background = element_blank(),
-    legend.title = element_text(colour = "black", face = "italic"),
-    legend.text = element_text(colour = "black", face = "italic"),
-    strip.text.x = element_text(size = 14)
-  )
-}
-
-# Load Quantile break functions
-
-qBr <- function(df, variable, rnd) {
-  if (missing(rnd)) {
-    as.character(quantile(round(df[[variable]],0),
-                          c(.01,.2,.4,.6,.8), na.rm=T))
-  } else if (rnd == FALSE | rnd == F) {
-    as.character(formatC(quantile(df[[variable]]), digits = 3),
-                 c(.01,.2,.4,.6,.8), na.rm=T)
-  }
-}
-
-q5 <- function(variable) {as.factor(ntile(variable, 5))}
-
-# Load hexadecimal color palette
-
-#palette5 <- c("#3552F2", "5E7EBF", "4F6573", "#F2E85C", "#F2CA52")
-palette5 <- c("#F2E85C", "#F2CA52", "5E7EBF", "4F6573", "#3552F2")
-
-
+setwd("~/GitHub/musa_practicum_nighttime")
 
 ###########
 # LOAD DATA
 ############
-dat <- read.csv("moves_2018.csv")
+dat <- read.csv("./data/moves_2018.csv")
+phl_cbg <- st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson")
 
+#MADDY's INITIAL WORK 
+#Clean up date column
+dat <- dat %>% 
+  mutate(date_range_start = as.date(dat$date_range_start),
+         date_range_end = as.date(dat$date_range_end))
+
+dat <- head(dat, 300) #For test purposes just looking at the first N observations
+
+colnames(dat)
 head(dat)
 
-#Add date column based off start date
-dat <- dat %>% mutate(date = as.date(dat$date_range_start))
+#Business traffic by day
+dat_day <- 
+  dat %>% 
+  select(safegraph_place_id, popularity_by_day) %>%
+  mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = "\\[|\\]")) %>%
+  mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = "\\{|\\}")) %>%
+  mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = '\\"|\\"')) %>% 
+  #mutate(popularity_by_day = str_replace_all(popularity_by_day, "[:]", " ")) %>% 
+  mutate(popularity_by_day = str_split(popularity_by_day, pattern = ",")) %>%
+  unnest(popularity_by_day) %>%
+  separate(.,
+           popularity_by_day,
+           c("Day", "Visits"),
+           sep = ":") %>%
+  mutate(Visits = as.numeric(Visits))
+
+week_order = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+dat_day %>%
+  group_by(Day) %>%
+  summarize(Avg_Visits = mean(Visits)) %>%
+  mutate(Day = factor(Day, levels = week_order)) %>% arrange(Day) %>% #order by day of the week
+  ggplot(., aes(x = Day, y = Avg_Visits)) + 
+  geom_col()
+
+#Popularity by Hour
+dat_hour <-
+  dat %>%
+  select(safegraph_place_id, popularity_by_hour) %>%
+  mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
+  mutate(popularity_by_hour = str_split(popularity_by_hour, pattern = ",")) %>%
+  unnest(popularity_by_hour) # Problem - unlike pop_by_day column, the hours aren't tagged.
 
 colnames(dat)
 
-dat_day <- dat %>% select(safegraph_place_id, location_name, postal_code, date, popularity_by_day) %>%
-  head(200) %>%
+#CBGs
+dat_cbg <-
+  dat %>%
+  select(safegraph_place_id, poi_cbg, visitor_home_cbgs) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>%
   separate(.,
-           popularity_by_day,
-           c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
-           sep = ",")
+           visitor_home_cbgs,
+           c("CBG", "Visitors"),
+           sep = ":") %>%
+  mutate(Visitors = as.numeric(Visitors))
 
-dat_day <- dat_day %>%
-  mutate(Mon_no = parse_number(Monday),
-         Tue_no = parse_number(Tuesday),
-         wed_no = parse_number(Wednesday),
-         Thurs_no = parse_number(Thursday),
-         Fri_no = parse_number(Friday),
-         Sat_no = parse_number(Saturday),
-         Sun_no = parse_number(Sunday)) 
+dat_cbg %>%
+  group_by(poi_cbg) %>%
+  summarize(Count = n())
 
-dat_day_zip <- dat_day %>%
-  dplyr::select(location_name, postal_code, Mon_no:Sun_no) %>%
-  pivot_longer(., 
-               cols = Mon_no:Sun_no, 
-               names_to = "Day",
-               values_to = "Count") %>%
-  group_by(postal_code, Day) %>%
-  summarise(sum = sum(Count)) 
-
-dat_day_zip %>% group_by(postal_code) %>%
-  ggplot() +
-  geom_bar(aes(sum))
-
-?geom_bar
-
-
-ggplot(correlation.long, aes(Value, countheroin_cases)) +
-  geom_point(size = 0.1) +
-  geom_text(data = correlation.cor, aes(label = paste("r =", round(correlation, 2))),
-            x=-Inf, y=Inf, vjust = 1.5, hjust = -.1) +
-  geom_smooth(method = "lm", se = FALSE, colour = "red") +
-  facet_wrap(~Variable, ncol = 3, scales = "free") +
-  labs(title = "Heroin Crime Count as a Function of Risk Factors",
-       subtitle = "Figure 5.1") +
-  plotTheme()
-
-?gather
-gather(Variable, Value, -countheroin_cases)
-?pivot_longer
-
-
-
-
-
-?separate
-head(dat_day)
-
+# ^^Figure out how to join this to the phl_cbg map.  
+#See which cbgs hve the highest number of people coming from ouside.
