@@ -9,6 +9,7 @@ library(tidyverse)
 library(sf)
 library(lubridate)
 library(datetime)
+library(viridis)
 
 setwd("~/GitHub/musa_practicum_nighttime")
 
@@ -16,7 +17,10 @@ setwd("~/GitHub/musa_practicum_nighttime")
 # LOAD DATA
 ############
 dat <- read.csv("./data/moves_2018.csv")
-phl_cbg <- st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson")
+phl_cbg <- st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson") %>%
+  mutate(GEOID10 = as.numeric(GEOID10))
+phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson") %>%
+  mutate(CODE = as.numeric(CODE))
 
 #MADDY's INITIAL WORK 
 #Clean up date column
@@ -64,24 +68,121 @@ dat_hour <-
 
 colnames(dat)
 
-#CBGs
+#Zip code analysis
+dat_zip <-
+  dat %>%
+  select(safegraph_place_id,
+         postal_code, 
+         raw_visit_counts, 
+         raw_visitor_counts, 
+         median_dwell, 
+         distance_from_home)%>%
+  rename(., CODE = postal_code) %>%
+  group_by(CODE) %>%
+  summarize(Avg_Visits = mean(raw_visit_counts),
+            Avg_Visitors = mean(raw_visitor_counts),
+            Avg_Dwell = mean(median_dwell),
+            Avg_DistHome = mean(distance_from_home)) %>%
+  # pivot_longer(cols = c("Avg_Visits", "Avg_Visitors", "Avg_Dwell", "Avg_DistHome"),
+  #              names_to = "Variable", 
+  #              values_to = "Avg_Count") %>%
+  left_join(phl_zip) %>%
+  st_as_sf()
+
+#Average number of visits by zip code
+dat_zip %>%
+  ggplot() + 
+  geom_sf(aes(fill = Avg_Visits)) + 
+  scale_fill_viridis() +
+  labs(title = "Average SafeGraph Visits per POI by Zip Code")
+
+#Average number of visitors by zip code
+dat_zip %>%
+  ggplot() + 
+  geom_sf(aes(fill = Avg_Visitors)) + 
+  scale_fill_viridis() +
+  labs(title = "Average SafeGraph Visitors per POI by Zip Code")
+
+#Average dwell time by zip code
+dat_zip %>%
+  ggplot() + 
+  geom_sf(aes(fill = Avg_Dwell)) + 
+  scale_fill_viridis() +
+  labs(title = "Average SafeGraph Dwell \nTime per POI by Zip Code")
+
+#Average dist from home by zip code
+dat_zip %>%
+  ggplot() + 
+  geom_sf(aes(fill = Avg_DistHome)) + 
+  scale_fill_viridis() +
+  labs(title = "Average SafeGraph Distance from \nHome per POI by Zip Code")
+
+#Census Block Groups
 dat_cbg <-
   dat %>%
-  select(safegraph_place_id, poi_cbg, visitor_home_cbgs) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
-  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
-  unnest(visitor_home_cbgs) %>%
-  separate(.,
-           visitor_home_cbgs,
-           c("CBG", "Visitors"),
-           sep = ":") %>%
-  mutate(Visitors = as.numeric(Visitors))
+  select(safegraph_place_id,
+         poi_cbg, 
+         raw_visit_counts, 
+         raw_visitor_counts, 
+         median_dwell, 
+         distance_from_home)%>%
+  rename(., GEOID10 = poi_cbg) %>%
+  group_by(GEOID10) %>%
+  summarize(Avg_Visits = mean(raw_visit_counts),
+            Avg_Visitors = mean(raw_visitor_counts),
+            Avg_Dwell = mean(median_dwell),
+            Avg_DistHome = mean(distance_from_home)) %>%
+  full_join(phl_cbg) %>% #lots of cbgs without SG POIs, so full join instead of left join.
+  st_as_sf()
 
+#Average number of visits by zip code
 dat_cbg %>%
-  group_by(poi_cbg) %>%
-  summarize(Count = n())
+  ggplot() + 
+  geom_sf(aes(fill = Avg_Visits)) + 
+  scale_fill_viridis() +
+  labs(title = "Average SafeGraph Visits per POI by CBG")
+
+#Average number of visitors by zip code
+dat_cbg %>%
+  ggplot() + 
+  geom_sf(aes(fill = Avg_Visitors)) + 
+  scale_fill_viridis() +
+  labs(title = "Average SafeGraph Visitors per POI by CBG")
+
+#Average dwell time by zip code
+dat_cbg %>%
+  ggplot() + 
+  geom_sf(aes(fill = Avg_Dwell)) + 
+  scale_fill_viridis() +
+  labs(title = "Average SafeGraph Dwell \nTime per POI by CBG")
+
+#Average dist from home by zip code
+dat_cbg %>%
+  ggplot() + 
+  geom_sf(aes(fill = Avg_DistHome)) + 
+  scale_fill_viridis() +
+  labs(title = "Average SafeGraph Distance from \nHome per POI by CBG")
+
+
+#WIP: Figuring out the POI CBGs with higest number of visits from outside CBGs.
+
+# dat_cbg <-
+#   dat %>%
+#   select(safegraph_place_id, poi_cbg, visitor_home_cbgs) %>%
+#   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+#   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+#   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+#   mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+#   unnest(visitor_home_cbgs) %>%
+#   separate(.,
+#            visitor_home_cbgs,
+#            c("CBG", "Visitors"),
+#            sep = ":") %>%
+#   mutate(Visitors = as.numeric(Visitors))
+# 
+# dat_cbg %>%
+#   group_by(poi_cbg) %>%
+#   summarize(Count = n())
 
 # ^^Figure out how to join this to the phl_cbg map.  
 #See which cbgs hve the highest number of people coming from ouside.
