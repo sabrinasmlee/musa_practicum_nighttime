@@ -28,7 +28,7 @@ dat <- dat %>%
   mutate(date_range_start = as.date(dat$date_range_start),
          date_range_end = as.date(dat$date_range_end))
 
-dat <- head(dat, 300) #For test purposes just looking at the first N observations
+#dat <- head(dat, 300) #For test purposes just looking at the first N observations
 
 colnames(dat)
 head(dat)
@@ -135,31 +135,39 @@ dat_cbg <-
   full_join(phl_cbg) %>% #lots of cbgs without SG POIs, so full join instead of left join.
   st_as_sf()
 
-#Average number of visits by zip code
+#Average number of visits by CBG
 dat_cbg %>%
+  subset(Avg_Visits < 1500) %>% #removing outliers to see patterns in the data
   ggplot() + 
-  geom_sf(aes(fill = Avg_Visits)) + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Avg_Visits), color = "transparent") + 
   scale_fill_viridis() +
   labs(title = "Average SafeGraph Visits per POI by CBG")
 
-#Average number of visitors by zip code
+#Average number of visitors by CBG
 dat_cbg %>%
+  subset(Avg_Visitors < 1000) %>% #removing outliers to see patterns in the data
   ggplot() + 
-  geom_sf(aes(fill = Avg_Visitors)) + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Avg_Visitors), color = "transparent") + 
   scale_fill_viridis() +
   labs(title = "Average SafeGraph Visitors per POI by CBG")
 
-#Average dwell time by zip code
+boxplot(dat_cbg$Avg_Visitors)
+
+#Average dwell time by CBG
 dat_cbg %>%
   ggplot() + 
-  geom_sf(aes(fill = Avg_Dwell)) + 
+  geom_sf(aes(fill = Avg_Dwell), color = "transparent") + 
   scale_fill_viridis() +
   labs(title = "Average SafeGraph Dwell \nTime per POI by CBG")
 
 #Average dist from home by zip code
 dat_cbg %>%
+  subset(Avg_DistHome < 9000) %>% #removing outliers to see patterns in the data
   ggplot() + 
-  geom_sf(aes(fill = Avg_DistHome)) + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Avg_DistHome), color = "transparent") + 
   scale_fill_viridis() +
   labs(title = "Average SafeGraph Distance from \nHome per POI by CBG")
 
