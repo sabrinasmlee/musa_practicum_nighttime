@@ -1,0 +1,257 @@
+---
+title: "Exploratory Analysis"
+author: "Maddy Kornhauser, Sabrina Lee, Brian Rawn"
+date: "2/4/2021"
+output: rmarkdown::github_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Class 2/9/2021
+
+## Updates
+
+* [Add updates on the data collection.]
+* Use case updates
+* Yelp research?
+
+## Exploratory Analysis
+
+This week, we have focused on exploring the 2018 SafeGraph dataset and answering the following questions.
+
+1. Where and how far are people travelling from? 
+2. When are people travelling?
+3. What is the number of visits/visitors? Is there seasonality in the mobility patterns? Weekly patterns?
+4. Where does nightlife happen?
+5. Where are the major nightlife corridors?
+6. How long do people spend in establishments?  What is the median dwell time?
+
+### Setup
+
+```{r include=FALSE}
+
+library(tidyverse)
+library(sf)
+library(lubridate)
+library(datetime)
+library(viridis)
+
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 3),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+palette5 <- viridis_pal()(5)
+mapTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2)
+  )
+}
+
+setwd("~/GitHub/musa_practicum_nighttime")
+
+###########
+# LOAD DATA
+############
+dat <- read.csv("./data/moves_2018.csv")
+
+dat <- dat %>% 
+  mutate(date_range_start = as.date(dat$date_range_start),
+         date_range_end = as.date(dat$date_range_end))
+
+phl_cbg <- st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson") %>%
+  mutate(GEOID10 = as.numeric(GEOID10))
+phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson") %>%
+  mutate(CODE = as.numeric(CODE))
+```
+
+### 1. Where and how far are people travelling from?
+
+Distance from Home variable.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_cbg <-
+  dat %>%
+  select(safegraph_place_id,
+         poi_cbg, 
+         raw_visit_counts, 
+         raw_visitor_counts, 
+         median_dwell, 
+         distance_from_home)%>%
+  rename(., GEOID10 = poi_cbg) %>%
+  group_by(GEOID10) %>%
+  summarize(Avg_Visits = mean(raw_visit_counts),
+            Avg_Visitors = mean(raw_visitor_counts),
+            Avg_Dwell = mean(median_dwell),
+            Avg_DistHome = mean(distance_from_home)) %>%
+  left_join(phl_cbg) %>% 
+  st_as_sf()
+
+#Average dist from home by CBG
+dat_cbg %>%
+  subset(Avg_DistHome < 9000) %>% #removing outliers to see patterns in the data
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Avg_DistHome), color = "transparent") + 
+  scale_fill_viridis() +
+  labs(title = "Average SafeGraph Distance from \nHome per POI by CBG")
+```
+
+Counting up the number of CBGs that visiting the POIs by CBG and Zip.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_cbg_visitors <- 
+  dat %>%
+  select(safegraph_place_id, poi_cbg, visitor_home_cbgs) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>%
+  separate(.,
+           visitor_home_cbgs,
+           c("Visitor_CBG", "Visitors"),
+           sep = ":") %>%
+  mutate(Visitor_CBG = as.numeric(Visitor_CBG),
+         poi_cbg = as.numeric(poi_cbg),
+         Visitors = as.numeric(Visitors))
+
+dat_cbg_visitors %>%
+  group_by(poi_cbg) %>%
+  summarize(Count = n()) %>%
+  rename(., GEOID10 = poi_cbg) %>%
+  left_join(phl_cbg) %>%
+  st_as_sf() %>%
+  ggplot() + 
+  geom_sf(aes(fill = q5(Count)), color = "transparent") + 
+  scale_fill_manual(values = palette5,
+                    name = "CBG Count\nQuintile Breaks") + 
+  mapTheme() +
+  labs(title = "How many visitors from different \nCBGs visit the POI CBG?")
+
+dat_zip_visitors <- 
+  dat %>%
+  select(safegraph_place_id, postal_code, visitor_home_cbgs) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>%
+  separate(.,
+           visitor_home_cbgs,
+           c("Visitor_CBG", "Visitors"),
+           sep = ":") %>%
+  mutate(Visitor_CBG = as.numeric(Visitor_CBG),
+         postal_code = as.numeric(postal_code),
+         Visitors = as.numeric(Visitors))
+
+dat_zip_visitors %>%
+  group_by(postal_code) %>%
+  summarize(Count = n()) %>%
+  rename(., CODE = postal_code) %>%
+  left_join(phl_zip) %>%
+  st_as_sf() %>%
+  ggplot() + 
+  geom_sf(aes(fill = q5(Count)), color = "transparent") + 
+  scale_fill_manual(values = palette5,
+                    name = "CBG Count\nQuintile Breaks") + 
+  mapTheme() +
+  labs(title = "How many visitors from different \nCBGs visit the POI Zip?")
+```
+
+### 2. When are people travelling?
+
+Traffic by day
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_day <- 
+  dat %>% 
+  select(safegraph_place_id, popularity_by_day) %>%
+  mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = "\\[|\\]")) %>%
+  mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = "\\{|\\}")) %>%
+  mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = '\\"|\\"')) %>% 
+  mutate(popularity_by_day = str_split(popularity_by_day, pattern = ",")) %>%
+  unnest(popularity_by_day) %>%
+  separate(.,
+           popularity_by_day,
+           c("Day", "Visits"),
+           sep = ":") %>%
+  mutate(Visits = as.numeric(Visits))
+
+week_order = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+dat_day %>%
+  group_by(Day) %>%
+  summarize(Avg_Visits = mean(Visits)) %>%
+  mutate(Day = factor(Day, levels = week_order)) %>% arrange(Day) %>% #order by day of the week
+  ggplot(., aes(x = Day, y = Avg_Visits)) + 
+  geom_col()
+```
+
+Traffic by Hour
+```{r message=FALSE, warning=FALSE}
+dat_hour <- 
+  dat %>% 
+  select(safegraph_place_id, popularity_by_hour) %>%
+  mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
+  unnest(popularity_by_hour) %>%
+  separate(.,
+           popularity_by_hour,
+           c("0", "1", "2", "3", "4", "5", "6", 
+             "7", "8", "9", "10", "11", "12", 
+             "13", "14", "15", "16", "17", "18",
+             "19", "20", "21", "22", "23"),
+           sep = ",") %>%
+  pivot_longer(cols = 2:25,
+               names_to = "Hour",
+               values_to = "Count") %>%
+  mutate(Hour = as.numeric(Hour),
+         Count = as.numeric(Count))
+  
+dat_hour %>%
+  group_by(Hour) %>%
+  summarize(Count = sum(Count)) %>%
+  ggplot(., aes(x = Hour, y = Count)) + 
+  geom_col()
+
+```
+
+### 3. Number of visits/vistors. Seasonality/weekly patterns?
+
+```{r}
+
+```
+
+### 4. Where does nightlife happen?
+
+```{r}
+
+```
+
+### 5. What are the major nightlife corridors?
+
+```{r}
+
+```
+
+### 6. How long do people spend in establishments?
+
+```{r}
+
+```
