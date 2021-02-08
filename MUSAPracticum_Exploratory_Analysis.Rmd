@@ -13,22 +13,46 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Class 2/9/2021
 
-## Updates
+## General Updates
 
-* [Add updates on the data collection.]
-* Use case updates
-* Yelp research?
+* Connected with Andrew last week and are coordinating on some additional data (2019 moves, normalization information).
+* Refined our use case.
+* Looked into using Yelp data.
+* Begun exploratory analysis.
+
+## Use Case
+
+Last week, our use case was focused on the causal effects of nightlife. Not only is this very difficult to measure, there are a number of problems associated with underlying bias in  data we would use to measure negative externalties.
+
+This week, we have split our use case into two parts - one to frame our exploratory analysis, and a second (WIP) to frame the public policy tool we will ultimately buid.
+
+* *Exploratory analysis use case*: How does the location of nightlife establishments impact foot traffic in Philadelphia?
+
+* *Public policy use case*: How far are people willing to travel for nightlife establishments? How much foot traffic can we expect in a given nightlife corridor?
+
+By developing a tool to measure how nightlife establishments impact foot traffic (a proxy for commercial activity), community groups and councils can quickly ascertain the demand for nightlife in certain areas of Philadelphia. This tool will help stakeholders make informed decisions when siting and issuing permits and licenses for future nightlife establishments.
+
+## Yelp data
+
+There is a [Yelp Open Dataset](https://www.yelp.com/dataset) with a subset of businesses, reviews and user data that is available for academic purposes.  Unfortunately, this data is only availabe for a selection of cities that do not include Philadelphia.
+
+Alternatively, we can plug into the Yelp API and pull Philadelphia data meeting various search criteria. Based on online articles (see [here](https://billpetti.github.io/2017-12-23-use-yelp-api-r-rstats/) and [here](https://rpubs.com/fitzpatrickm8/yelpapi)) we wrote a script that can queries the Yelp API. This is also saved on the repo. There are some limitations:
+
+* It appears that you cannot pull more than 50 search results at a time based on a search term.
+* It's not clear how search results are ordered.
+* How would we match this up against the SafeGraph data?  There is coordinate infromation and names of stores, but we can forsee some issues here.
+* Like the 311 and crime data, we have to consider the underying bias of the Yelp data. Is this reliable?
 
 ## Exploratory Analysis
 
 This week, we have focused on exploring the 2018 SafeGraph dataset and answering the following questions.
 
-1. Where and how far are people travelling from? 
-2. When are people travelling?
-3. What is the number of visits/visitors? Is there seasonality in the mobility patterns? Weekly patterns?
-4. Where does nightlife happen?
-5. Where are the major nightlife corridors?
-6. How long do people spend in establishments?  What is the median dwell time?
+* Where and how far are people travelling from? 
+* When are people travelling?
+* What is the number of visits/visitors? Is there seasonality in the mobility patterns? Weekly patterns?
+* Where does nightlife happen?
+* Where are the major nightlife corridors?
+* How long do people spend in establishments?  What is the median dwell time?
 
 ### Setup
 
@@ -39,6 +63,7 @@ library(sf)
 library(lubridate)
 library(datetime)
 library(viridis)
+library(gridExtra)
 
 qBr <- function(df, variable, rnd) {
   if (missing(rnd)) {
@@ -73,10 +98,18 @@ setwd("~/GitHub/musa_practicum_nighttime")
 # LOAD DATA
 ############
 dat <- read.csv("./data/moves_2018.csv")
+phila <- st_read("./demo/phila.geojson")
 
 dat <- dat %>% 
-  mutate(date_range_start = as.date(dat$date_range_start),
-         date_range_end = as.date(dat$date_range_end))
+  dplyr::select(safegraph_place_id, date_range_start, date_range_end, raw_visit_counts,
+                       raw_visitor_counts, visits_by_day, poi_cbg, visitor_home_cbgs, 
+                       visitor_daytime_cbgs, visitor_work_cbgs, visitor_country_of_origin,
+                       distance_from_home, median_dwell, bucketed_dwell_times, related_same_day_brand, 
+                       related_same_month_brand, popularity_by_hour, popularity_by_day, device_type) %>%
+  # mutate(date_range_start = as.date(dat$date_range_start),
+  #        date_range_end = as.date(dat$date_range_end)) %>%
+  left_join(., phila, by = "safegraph_place_id") %>% 
+  st_as_sf()
 
 phl_cbg <- st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson") %>%
   mutate(GEOID10 = as.numeric(GEOID10))
@@ -84,42 +117,14 @@ phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c
   mutate(CODE = as.numeric(CODE))
 ```
 
-### 1. Where and how far are people travelling from?
+### Where and how far are people travelling from?
 
-Distance from Home variable.
-```{r echo=TRUE, message=FALSE, warning=FALSE}
-dat_cbg <-
-  dat %>%
-  select(safegraph_place_id,
-         poi_cbg, 
-         raw_visit_counts, 
-         raw_visitor_counts, 
-         median_dwell, 
-         distance_from_home)%>%
-  rename(., GEOID10 = poi_cbg) %>%
-  group_by(GEOID10) %>%
-  summarize(Avg_Visits = mean(raw_visit_counts),
-            Avg_Visitors = mean(raw_visitor_counts),
-            Avg_Dwell = mean(median_dwell),
-            Avg_DistHome = mean(distance_from_home)) %>%
-  left_join(phl_cbg) %>% 
-  st_as_sf()
+The following maps break down the count of different CBGs by point of interest and sectors that contribute to the nighttime economy. Looking first at restaurants, we see that locations that attract the most CBGs are located primarily in Center City and along transit lines. Because of so many restaurants, we have shown a map during summer and winter.
 
-#Average dist from home by CBG
-dat_cbg %>%
-  subset(Avg_DistHome < 9000) %>% #removing outliers to see patterns in the data
-  ggplot() + 
-  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
-  geom_sf(aes(fill = Avg_DistHome), color = "transparent") + 
-  scale_fill_viridis() +
-  labs(title = "Average SafeGraph Distance from \nHome per POI by CBG")
-```
-
-Counting up the number of CBGs that visiting the POIs by CBG and Zip.
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 dat_cbg_visitors <- 
   dat %>%
-  select(safegraph_place_id, poi_cbg, visitor_home_cbgs) %>%
+  select(safegraph_place_id, date_range_start, top_category, sub_category, poi_cbg, visitor_home_cbgs, geometry) %>%
   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
@@ -133,56 +138,86 @@ dat_cbg_visitors <-
          poi_cbg = as.numeric(poi_cbg),
          Visitors = as.numeric(Visitors))
 
-dat_cbg_visitors %>%
-  group_by(poi_cbg) %>%
+#Restaurants
+restaurants_cbg_jan <- 
+  dat_cbg_visitors %>%
+  filter(top_category == "Restaurants and Other Eating Places",
+         date_range_start == "2018-01-01T05:00:00Z") %>%
+  group_by(safegraph_place_id) %>%
   summarize(Count = n()) %>%
-  rename(., GEOID10 = poi_cbg) %>%
-  left_join(phl_cbg) %>%
-  st_as_sf() %>%
   ggplot() + 
-  geom_sf(aes(fill = q5(Count)), color = "transparent") + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = .5) + 
   scale_fill_manual(values = palette5,
-                    name = "CBG Count\nQuintile Breaks") + 
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuintile Breaks") +
   mapTheme() +
-  labs(title = "How many visitors from different \nCBGs visit the POI CBG?")
+  labs(title = "How many different CBGs visit \neach restaurant? (January)")
 
-dat_zip_visitors <- 
-  dat %>%
-  select(safegraph_place_id, postal_code, visitor_home_cbgs) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
-  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
-  unnest(visitor_home_cbgs) %>%
-  separate(.,
-           visitor_home_cbgs,
-           c("Visitor_CBG", "Visitors"),
-           sep = ":") %>%
-  mutate(Visitor_CBG = as.numeric(Visitor_CBG),
-         postal_code = as.numeric(postal_code),
-         Visitors = as.numeric(Visitors))
-
-dat_zip_visitors %>%
-  group_by(postal_code) %>%
+restaurants_cbg_jul <- 
+  dat_cbg_visitors %>%
+  filter(top_category == "Restaurants and Other Eating Places",
+         date_range_start == "2018-07-01T04:00:00Z") %>%
+  group_by(safegraph_place_id) %>%
   summarize(Count = n()) %>%
-  rename(., CODE = postal_code) %>%
-  left_join(phl_zip) %>%
-  st_as_sf() %>%
-  ggplot() + 
-  geom_sf(aes(fill = q5(Count)), color = "transparent") + 
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = .5) +
   scale_fill_manual(values = palette5,
-                    name = "CBG Count\nQuintile Breaks") + 
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuintile Breaks") +
   mapTheme() +
-  labs(title = "How many visitors from different \nCBGs visit the POI Zip?")
+  labs(title = "How many different CBGs visit \neach restaurant (July)?")
+
+grid.arrange(restaurants_cbg_jan, restaurants_cbg_jul, nrow = 1)
 ```
 
-### 2. When are people travelling?
+The following maps look at the number of CBGs per location for bars and concert/performance venues.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Bars
+bars_cbg <-
+  dat_cbg_visitors %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+  group_by(safegraph_place_id) %>%
+  summarize(Count = n()) %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = 1) + 
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuintile Breaks") +
+  mapTheme() +
+  labs(title = "How many different CBGs visit bars?")
 
-Traffic by day
+#Concert Venues
+concert_cbg <-
+  dat_cbg_visitors %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  group_by(safegraph_place_id) %>%
+  summarize(Count = n()) %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = 1) + 
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuintile Breaks") +
+  mapTheme() +
+  labs(title = "How many different CBGs visit \nconcert venues and performing arts venues?")
+
+grid.arrange(bars_cbg, concert_cbg, nrow = 1)
+```
+
+### When are people travelling?
+
+The following charts looks at the average visits by day in restaurants and other eating places. This shows the patterns for each of the subcategory under restaurant. 
+
+We see an increase throughout the week until Friday and then decreased traffic over the weekend. This likely reflects the workforce that isn't coming into the city over the weekends.
+
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 dat_day <- 
   dat %>% 
-  select(safegraph_place_id, popularity_by_day) %>%
+  select(safegraph_place_id, top_category, sub_category, popularity_by_day) %>%
   mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = "\\[|\\]")) %>%
   mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = "\\{|\\}")) %>%
   mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = '\\"|\\"')) %>% 
@@ -197,18 +232,46 @@ dat_day <-
 week_order = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 dat_day %>%
-  group_by(Day) %>%
+  filter(top_category == "Restaurants and Other Eating Places") %>%
+  group_by(sub_category, Day) %>%
   summarize(Avg_Visits = mean(Visits)) %>%
   mutate(Day = factor(Day, levels = week_order)) %>% arrange(Day) %>% #order by day of the week
   ggplot(., aes(x = Day, y = Avg_Visits)) + 
-  geom_col()
+  geom_col() +
+  facet_wrap(~sub_category)
 ```
 
-Traffic by Hour
-```{r message=FALSE, warning=FALSE}
+The same metric for bars (there are no sub-categories).
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_day %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+  group_by(sub_category, Day) %>%
+  summarize(Avg_Visits = mean(Visits)) %>%
+  mutate(Day = factor(Day, levels = week_order)) %>% arrange(Day) %>% #order by day of the week
+  ggplot(., aes(x = Day, y = Avg_Visits)) + 
+  geom_col() +
+  facet_wrap(~sub_category)
+
+```
+
+And for performing arts centers and companies.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_day %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  group_by(top_category, Day) %>%
+  summarize(Avg_Visits = mean(Visits)) %>%
+  mutate(Day = factor(Day, levels = week_order)) %>% arrange(Day) %>% #order by day of the week
+  ggplot(., aes(x = Day, y = Avg_Visits)) + 
+  geom_col() +
+  facet_wrap(~top_category)
+```
+
+Turning to traffic by hour of the day, the following chart shows foot average foot traffic in restaurants.  We have split them out by sub-category. At this level, it appears that most restaurant traffic does not occur at night, but rather in the middle of the day.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 dat_hour <- 
   dat %>% 
-  select(safegraph_place_id, popularity_by_hour) %>%
+  select(safegraph_place_id, top_category, sub_category, popularity_by_hour) %>%
   mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
   unnest(popularity_by_hour) %>%
   separate(.,
@@ -218,39 +281,67 @@ dat_hour <-
              "13", "14", "15", "16", "17", "18",
              "19", "20", "21", "22", "23"),
            sep = ",") %>%
-  pivot_longer(cols = 2:25,
+  pivot_longer(cols = 4:27,
                names_to = "Hour",
                values_to = "Count") %>%
   mutate(Hour = as.numeric(Hour),
          Count = as.numeric(Count))
-  
+
+#Restaurants
 dat_hour %>%
-  group_by(Hour) %>%
-  summarize(Count = sum(Count)) %>%
-  ggplot(., aes(x = Hour, y = Count)) + 
-  geom_col()
+  filter(top_category == "Restaurants and Other Eating Places") %>%
+  group_by(sub_category, Hour) %>%
+  summarize(Avg_Visits = mean(Count)) %>%
+  ggplot(., aes(x = Hour, y = Avg_Visits)) + 
+  geom_col() +
+  facet_wrap(~sub_category)
 
 ```
 
-### 3. Number of visits/vistors. Seasonality/weekly patterns?
+We have also include the same metric for bars, which show a stronger pattern towards nighttime traffic. 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Bars
+dat_hour %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+  group_by(sub_category, Hour) %>%
+  summarize(Avg_Visits = mean(Count)) %>%
+  ggplot(., aes(x = Hour, y = Avg_Visits)) + 
+  geom_col() +
+  labs(title = "Average Traffic by Hour in Philadelphia Bars")
+```
+
+Same for concert venues and performing arts spaces, which have a high amount of traffic in the evening and early morning hours.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Concert Venues
+dat_hour %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  group_by(top_category, Hour) %>%
+  summarize(Avg_Visits = mean(Count)) %>%
+  ggplot(., aes(x = Hour, y = Avg_Visits)) + 
+  geom_col() +
+  facet_wrap(~top_category)
+```
+
+### Number of visits/vistors. Seasonality/weekly patterns?
 
 ```{r}
 
 ```
 
-### 4. Where does nightlife happen?
+### Where does nightlife happen?
 
 ```{r}
 
 ```
 
-### 5. What are the major nightlife corridors?
+### What are the major nightlife corridors?
 
 ```{r}
 
 ```
 
-### 6. How long do people spend in establishments?
+### How long do people spend in establishments?
 
 ```{r}
 
