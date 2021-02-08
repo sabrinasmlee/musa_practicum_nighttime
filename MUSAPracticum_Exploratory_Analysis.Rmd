@@ -241,6 +241,59 @@ dat_hour %>%
 ### 4. Where does nightlife happen?
 
 ```{r}
+#Census Block Groups
+dat_cbg2 <-
+  dat %>%
+  select(safegraph_place_id,
+         poi_cbg, 
+         raw_visit_counts, 
+         raw_visitor_counts, 
+         median_dwell, 
+         distance_from_home)%>%
+  rename(., GEOID10 = poi_cbg) %>%
+  group_by(GEOID10) %>%
+  summarize(Avg_Visits = mean(raw_visit_counts),
+            Avg_Visitors = mean(raw_visitor_counts),
+            Total_Visits = sum(raw_visit_counts),
+            Total_Visitors = sum(raw_visitor_counts),
+            Avg_Dwell = mean(median_dwell),
+            Avg_DistHome = mean(distance_from_home)) %>%
+  left_join(phl_cbg) %>% 
+  st_as_sf() %>%
+  mutate(Visits_Per_Area = Total_Visits / Shape__Area) %>%
+  mutate(Visitors_Per_Area = Total_Visitors / Shape__Area)
+
+dat_cbg2 %>%
+  subset(Total_Visits < 1900000) %>% #removing outliers to see patterns in the data
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Total_Visits), color = "transparent") + 
+  scale_fill_viridis() +
+  labs(title = "Total SafeGraph Visits by CBG")
+
+dat_cbg2 %>%
+  subset(Total_Visitors < 1900000) %>% #removing outliers to see patterns in the data
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Total_Visits), color = "transparent") + 
+  scale_fill_viridis() +
+  labs(title = "Total SafeGraph Visitors by CBG")
+
+dat_cbg2 %>%
+  #subset(Avg_Visits < 1500) %>% #removing outliers to see patterns in the data
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+  scale_fill_viridis() +
+  labs(title = "Total SafeGraph Visits by CBG, Adjusted by CBG Area")
+
+dat_cbg2 %>%
+  #subset(Avg_Visits < 1500) %>% #removing outliers to see patterns in the data
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Visitors_Per_Area), color = "transparent") + 
+  scale_fill_viridis() +
+  labs(title = "Total SafeGraph Visitors by CBG, Adjusted by CBG Area")
 
 ```
 
