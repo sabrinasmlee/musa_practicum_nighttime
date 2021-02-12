@@ -48,13 +48,14 @@ dat <- read.csv("./data/moves_2018.csv")
 phila <- st_read("./demo/phila.geojson")
 
 phl_cbg <- st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson") %>%
-  mutate(GEOID10 = as.numeric(GEOID10))
+  mutate(GEOID10 = as.numeric(GEOID10)) %>%
+  st_transform('ESRI:102728')
 phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson") %>%
   mutate(CODE = as.numeric(CODE))
 
 #MADDY's INITIAL WORK 
 #Join to geography data
-dat <- dat %>%
+dat2 <- dat %>%
   dplyr::select(safegraph_place_id, date_range_start, date_range_end, raw_visit_counts,
                        raw_visitor_counts, visits_by_day, poi_cbg, visitor_home_cbgs, 
                        visitor_daytime_cbgs, visitor_work_cbgs, visitor_country_of_origin,
@@ -334,7 +335,7 @@ dat_hour %>%
 #By Visitor CBG
 
 dat_cbg_visitors <- 
-  dat %>%
+  dat2 %>%
   select(safegraph_place_id, date_range_start, top_category, sub_category, poi_cbg, visitor_home_cbgs, geometry) %>%
   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
@@ -537,3 +538,153 @@ unique(dat$top_category)
 
 dat %>% filter(top_category == "Performing Arts Companies")
 unique(other$sub_category)
+
+######################
+# ORIGIN / DESTINATION
+######################
+#Which CBGs travel furthest for nightlife?
+#Bars
+
+dat_cbg_origin <- 
+  dat2 %>%
+  select(safegraph_place_id, date_range_start, top_category, sub_category, poi_cbg, visitor_home_cbgs, geometry) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>%
+  separate(.,
+           visitor_home_cbgs,
+           c("Visitor_CBG", "Visitors"),
+           sep = ":") %>%
+  mutate(Visitor_CBG = as.numeric(Visitor_CBG),
+         poi_cbg = as.numeric(poi_cbg),
+         Visitors = as.numeric(Visitors))
+
+#install.packages("lwgeom")
+#library(lwgeom)
+
+dat_cbg_origin %>%
+  st_drop_geometry() %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  dplyr::select(top_category, sub_category, poi_cbg, GEOID10, Visitors, geometry) %>%
+  drop_na(geometry) %>% #dropping CBGs outside of philadelphia
+  mutate(origin_centroid = st_centroid(geometry)) %>%
+  dplyr::select(top_category, 
+                sub_category, 
+                poi_cbg, 
+                GEOID10, 
+                Visitors, 
+                origin_centroid) %>%
+  rename(., origin_cbg = GEOID10,
+         GEOID10 = poi_cbg) %>%
+  left_join(phl_cbg) %>%
+  mutate(dest_centroid = st_centroid(geometry)) %>%
+  dplyr::select(top_category, 
+                sub_category, 
+                origin_cbg, 
+                GEOID10, 
+                Visitors, 
+                origin_centroid, 
+                dest_centroid) %>%
+  rename(., dest_cbg = GEOID10) %>%
+  mutate(Distance = st_distance(origin_centroid, dest_centroid))
+#Somethign weird is going on here with the distance calculation.  
+
+#Trying again without calculating the individual centroid.
+#Arts
+unique(dat_cbg_origin$date_range_start)
+unique(dat_cbg_origin$top_category)
+
+#Arts Venues
+dat_cbg_origin %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  st_drop_geometry() %>%
+  rename(., GEOID10 = Visitor_CBG) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  select(safegraph_place_id, top_category, sub_category, poi_cbg, GEOID10, Visitors, geometry) %>%
+  rename(., cbg_origin = GEOID10,
+         GEOID10 = poi_cbg,
+         geometry_origin = geometry) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  select(safegraph_place_id, top_category, sub_category, GEOID10, cbg_origin, Visitors, geometry_origin, geometry) %>%
+  rename(., cbg_dest = GEOID10,
+         geometry_dest = geometry) %>%
+  drop_na(geometry_origin) %>%
+  mutate(distance = st_distance(st_centroid(geometry_origin), st_centroid(geometry_dest))) %>%
+  group_by(cbg_origin) %>%
+  summarize(avg_distance = mean(distance)) %>%
+  rename(., GEOID10 = cbg_origin) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  mutate(avg_distance = as.numeric(avg_distance)) %>% #I think this should be weighted average
+  st_as_sf() %>%
+  ggplot() +
+  geom_sf(aes(fill = avg_distance)) + 
+  scale_fill_viridis() + 
+  mapTheme() +
+  labs(title = "How far do people travel to perforing arts venues?")
+
+
+#Bars
+dat_cbg_origin %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
+           date_range_start == "2018-07-01T04:00:00Z") %>%
+  st_drop_geometry() %>%
+  rename(., GEOID10 = Visitor_CBG) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  select(safegraph_place_id, top_category, sub_category, poi_cbg, GEOID10, Visitors, geometry) %>%
+  rename(., cbg_origin = GEOID10,
+         GEOID10 = poi_cbg,
+         geometry_origin = geometry) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  select(safegraph_place_id, top_category, sub_category, GEOID10, cbg_origin, Visitors, geometry_origin, geometry) %>%
+  rename(., cbg_dest = GEOID10,
+         geometry_dest = geometry) %>%
+  drop_na(geometry_origin) %>%
+  mutate(distance = st_distance(st_centroid(geometry_origin), st_centroid(geometry_dest))) %>%
+  group_by(cbg_origin) %>%
+  summarize(avg_distance = mean(distance)) %>%
+  rename(., GEOID10 = cbg_origin) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  mutate(avg_distance = as.numeric(avg_distance)) %>%
+  st_as_sf() %>%
+  ggplot() +
+  geom_sf(aes(fill = avg_distance)) + 
+  scale_fill_viridis() + 
+  mapTheme() +
+  labs(title = "How far do people travel to bars?")
+
+
+st_distance(st_centroid(bars_origin$geometry_origin), st_centroid(bars_origin$geometry_dest))
+
+
+
+#2 datasets - origin CBG and destination CBG
+origin_cbg <-  dat2 %>%
+  select(safegraph_place_id, date_range_start, top_category, sub_category, visitor_home_cbgs, geometry) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>%
+  separate(.,
+           visitor_home_cbgs,
+           c("Visitor_CBG", "Visitors"),
+           sep = ":") %>%
+  mutate(Visitor_CBG = as.numeric(Visitor_CBG),
+         Visitors = as.numeric(Visitors))
+
+
+dat_cbg_visitors %>%
+  group_by(poi_cbg) %>%
+  summarize(Count = n()) %>%
+  rename(., GEOID10 = poi_cbg) %>%
+  left_join(phl_cbg) %>%
+  st_as_sf() %>%
+  ggplot() + 
+  geom_sf(aes(fill = q5(Count)), color = "transparent") + 
+  scale_fill_manual(values = palette5,
+                    name = "CBG Count\nQuintile Breaks") + 
+  mapTheme() +
+  labs(title = "How many different CBGs visit the POI CBG?")
