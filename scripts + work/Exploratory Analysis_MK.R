@@ -45,7 +45,9 @@ setwd("~/GitHub/musa_practicum_nighttime")
 # LOAD DATA
 ############
 dat <- read.csv("./data/moves_2018.csv")
-phila <- st_read("./demo/phila.geojson")
+phila <- st_read("./demo/phila.geojson") %>%
+  st_transform('ESRI:102728') %>%
+  st_as_sf()
 
 phl_cbg <- st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson") %>%
   mutate(GEOID10 = as.numeric(GEOID10)) %>%
@@ -545,7 +547,7 @@ unique(other$sub_category)
 ######################
 # 1. On average, how far do CBGs travel for nightlife?
 
-#Preapring dataset
+#Preapring dataset to split out by individual cbgs
 dat_cbg <- 
   dat2 %>%
   select(safegraph_place_id, date_range_start, top_category, sub_category, poi_cbg, visitor_home_cbgs, geometry) %>%
@@ -592,7 +594,8 @@ dat_cbg <-
 #   mutate(Distance = st_distance(origin_centroid, dest_centroid))
 
 #ARTS VENUES
-arts_origin <- dat_cbg %>%
+arts_origin <- 
+  dat_cbg %>%
   filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
            top_category == "Performing Arts Companies") %>%
   st_drop_geometry() %>%
@@ -609,13 +612,14 @@ arts_origin <- dat_cbg %>%
   drop_na(geometry_origin) %>%
   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), st_centroid(geometry_dest)))
 
-arts_points <- dat2 %>%
+arts_points <- 
+  dat2 %>%
   filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
            top_category == "Performing Arts Companies") 
 
 #Arts (continuous)
 arts_origin %>% 
-  group_by(cbg_origin, top_category) %>%
+  group_by(cbg_origin) %>%
   summarize(avg_distance = mean(distance)) %>%
   rename(., GEOID10 = cbg_origin) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
@@ -627,13 +631,11 @@ arts_origin %>%
   geom_sf(data = arts_points, color = "red") +
   scale_fill_viridis() + 
   mapTheme() +
-  labs(title = "How far do people travel to perforing arts venues?") +
-  facet_wrap(~sub_category) +
-  facet_wrap(~top_category)
+  labs(title = "How far do people travel to perforing arts venues?") 
 
 #Arts quintile
 arts_origin %>%
-  group_by(cbg_origin, top_category) %>%
+  group_by(cbg_origin) %>%
   summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  #Do I use weighted mean here?
   rename(., GEOID10 = cbg_origin) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
@@ -647,14 +649,13 @@ arts_origin %>%
                     aesthetics = c("colour", "fill"),
                     name = "Average Distance \n(Quintile)") +
   mapTheme() +
-  labs(title = "How far do people travel to perforing arts venues?") +
-  facet_wrap(~top_category)
+  labs(title = "How far do people travel to perforing arts venues?")
 
 
 #BARS
-#install.packages("geosphere")
-# library(geosphere)
-bars_origin <- dat_cbg %>%
+#DATA WRANGLING
+bars_origin <- 
+  dat_cbg %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
   st_drop_geometry() %>%
   rename(., GEOID10 = Visitor_CBG) %>%
@@ -670,10 +671,11 @@ bars_origin <- dat_cbg %>%
   drop_na(geometry_origin) %>% 
   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), st_centroid(geometry_dest)))
 
-bars_points <- dat2 %>%
+bars_points <- 
+  dat2 %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)") 
 
-
+#VISUALIZATIONS
 #Bars continuous
 bars_origin %>%
   group_by(cbg_origin) %>%
@@ -707,29 +709,47 @@ bars_origin %>%
   labs(title = "How far do people travel to bars?")
 
 #RESTAURANTS
-restaurant_points <- dat2 %>%
-  filter(top_category == "Restaurants and Other Eating Places") 
-
+#DATASET
 restaurants_origin <- dat_cbg %>%
   filter(top_category == "Restaurants and Other Eating Places") %>%
   st_drop_geometry() %>%
   rename(., GEOID10 = Visitor_CBG) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
-  select(safegraph_place_id, top_category, sub_category, poi_cbg, GEOID10, Visitors, geometry) %>%
+  select(safegraph_place_id, 
+         top_category, 
+         sub_category, 
+         poi_cbg, 
+         GEOID10, 
+         Visitors, 
+         geometry) %>%
   rename(., cbg_origin = GEOID10,
          GEOID10 = poi_cbg,
          geometry_origin = geometry) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
-  select(safegraph_place_id, top_category, sub_category, GEOID10, cbg_origin, Visitors, geometry_origin, geometry) %>%
+  select(safegraph_place_id, 
+         top_category, 
+         sub_category, 
+         GEOID10, 
+         cbg_origin, 
+         Visitors, 
+         geometry_origin, 
+         geometry) %>%
   rename(., cbg_dest = GEOID10,
          geometry_dest = geometry) %>%
-  drop_na(geometry_origin) %>% 
+  #Removing visitors from outside Philadelphia
+  #Dataset also had a census tract from Montgomery County that I've removed.
+  drop_na(geometry_origin, geometry_dest) %>% 
   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), st_centroid(geometry_dest)))
 
+restaurant_points <- 
+  dat2 %>%
+  filter(top_category == "Restaurants and Other Eating Places") 
+
+#VISUALIZATIONS
 #All Restaurants continuous
 restaurants_origin %>%
   group_by(cbg_origin) %>%
-  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  #Do I use weighted mean here?
+  summarize(avg_distance = mean(distance)) %>%  #Do I use weighted mean here?
   rename(., GEOID10 = cbg_origin) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
   mutate(avg_distance = as.numeric(avg_distance)) %>%
@@ -740,10 +760,11 @@ restaurants_origin %>%
   geom_sf(data = restaurant_points, color = "red", size = .1) +
   scale_fill_viridis() + 
   mapTheme() +
-  labs(title = "How far do people travel to bars?") 
+  labs(title = "How far do people travel to restaurants?") 
 
 #All Restaurants quintile 
 restaurants_origin %>%
+  drop_na(distance) %>%  
   group_by(cbg_origin) %>%
   summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  #Do I use weighted mean here?
   rename(., GEOID10 = cbg_origin) %>%
@@ -774,7 +795,7 @@ restaurants_origin %>%
   geom_sf(data = restaurant_points, color = "red", size = .1) +
   scale_fill_viridis() + 
   mapTheme() +
-  labs(title = "How far do people travel to bars?") +
+  labs(title = "How far do people travel to restaurants?") +
   facet_wrap(~sub_category)
 
 #Restaurants quintile (faceted)
@@ -796,126 +817,333 @@ restaurants_origin %>%
   labs(title = "How far do people travel to restaurants?") +
   facet_wrap(~sub_category)
 
-# 2. Which locations have visitors that travel the furthest?
+##############################################################
+# 2. Destinations - how far do people travel to each location?
+##############################################################
 ##ARTS VENUES
-phl_cbg_sp <- as(phl_cbg, Class = "Spatial")
-
-#install.packages("spdplyr")
-library(spdplyr)
-head(arts_dest)
-
-places <- dat2 %>% select(safegraph_place_id, geometry)
-
-arts_dest <- dat_cbg %>%
+#DATASET
+arts_dest <-
+  dat_cbg %>%
   filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
            top_category == "Performing Arts Companies") %>%
   st_drop_geometry() %>%
   rename(., GEOID10 = Visitor_CBG) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
-  select(safegraph_place_id, top_category, sub_category, GEOID10, Visitors, geometry) %>%
+  select(safegraph_place_id, 
+         GEOID10, 
+         poi_cbg, 
+         Visitors, 
+         geometry) %>%
   rename(., cbg_origin = GEOID10,
-         geometry_origin = geometry) %>%
-  left_join(places, by = "safegraph_place_id") %>%
-  drop_na(cbg_origin)
-  select(safegraph_place_id, top_category, sub_category, GEOID10, cbg_origin, Visitors, geometry_origin, geometry) %>%
-  rename(., cbg_dest = GEOID10,
-         geometry_dest = geometry) %>%
-  drop_na(geometry_origin) %>%
+         geometry_origin = geometry,
+         cbg_dest = poi_cbg) %>%
+  left_join(phila, by = "safegraph_place_id") %>%
+  select(safegraph_place_id, 
+         top_category, 
+         sub_category, 
+         cbg_origin, 
+         cbg_dest, 
+         Visitors, 
+         geometry_origin, 
+         geometry) %>%
+  rename(., geometry_dest = geometry) %>%
+  drop_na(geometry_origin) %>% #dropping origins outside of philadelphia!
   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), st_centroid(geometry_dest)))
 
-#Arts (continuous)
-arts %>% 
-  group_by(cbg_dest) %>%
-  summarize(avg_distance = mean(distance)) %>%
-  rename(., GEOID10 = cbg_dest) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  mutate(avg_distance = as.numeric(avg_distance)) %>% #I think this should be weighted average
-  st_as_sf() %>%
-  ggplot() +
-  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
-  geom_sf(aes(fill = avg_distance), color = "transparent") + 
-  geom_sf(data = arts_points, color = "red", size = .8) +
-  scale_fill_viridis() + 
-  mapTheme() +
-  labs(title = "To which performing arts venues do people travel the farthest?") 
-
-#Arts quintile
-dat2 %>%
-  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
-           top_category == "Performing Arts Companies")
+#VISUALIZATIONS
+#Arts continuous
+arts_dest %>%
   group_by(safegraph_place_id) %>%
-  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  #Do I use weighted mean here?
-  # rename(., GEOID10 = cbg_dest) %>%
-  # left_join(phl_cbg, by = "GEOID10") %>%
-  # mutate(avg_distance = as.numeric(avg_distance)) %>%
+  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
+  left_join(phila, by = "safegraph_place_id") %>%
   st_as_sf() %>%
   ggplot() +
   geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
-  geom_sf(aes(fill = q5(avg_distance)), color = "transparent") + 
-  # geom_sf(data = arts_points, color = "red", size = .8) +
+  geom_sf(aes(color = avg_distance), size = 2) + 
+  scale_fill_viridis(aesthetics = "color") +
+  mapTheme() +
+  labs(title = "To which arts venues do visitors travel the furthest?") 
+
+#Arts quintiles
+arts_dest %>%
+  group_by(safegraph_place_id) %>%
+  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
+  left_join(phila, by = "safegraph_place_id") %>%
+  st_as_sf() %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+  geom_sf(aes(color = q5(avg_distance)), size = 2) + 
   scale_fill_manual(values = palette5,
                     aesthetics = c("colour", "fill"),
                     name = "Average Distance \n(Quintile)") +
   mapTheme() +
-  labs(title = "To which performing arts venues do people travel the farthest?") 
+  labs(title = "To which arts venues do visitors travel the furthest?") 
 
+##BARS
+#DATASET
+bars_dest <-
+  dat_cbg %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+  st_drop_geometry() %>%
+  rename(., GEOID10 = Visitor_CBG) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  select(safegraph_place_id, 
+         GEOID10, 
+         poi_cbg, 
+         Visitors, 
+         geometry) %>%
+  rename(., cbg_origin = GEOID10,
+         geometry_origin = geometry,
+         cbg_dest = poi_cbg) %>%
+  left_join(phila, by = "safegraph_place_id") %>%
+  select(safegraph_place_id, 
+         top_category, 
+         sub_category, 
+         cbg_origin, 
+         cbg_dest, 
+         Visitors, 
+         geometry_origin, 
+         geometry) %>%
+  rename(., geometry_dest = geometry) %>%
+  drop_na(geometry_origin) %>% #dropping origins outside of philadelphia!
+  mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest))
 
-# dat_cbg_visitors %>%
-#   filter(top_category == "Drinking Places (Alcoholic Beverages)", 
-#          date_range_start == "2018-01-01T05:00:00Z") %>%
-#   group_by(safegraph_place_id) %>%
-#   summarize(Count = n()) %>%
-#   ggplot() +
-#   geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
-#   geom_sf(aes(color = q5(Count)), size = 1) + 
-#   scale_fill_manual(values = palette5,
-#                     aesthetics = c("colour", "fill"),
-#                     name = "CBG Count\nQuintile Breaks") +
-#   mapTheme() +
-#   labs(title = "How many different CBGs visit each bar (January)?")
-# 
-# dat_cbg_visitors %>%
-#   filter(top_category == "Drinking Places (Alcoholic Beverages)", 
-#          date_range_start == "2018-07-01T04:00:00Z") %>%
-#   group_by(safegraph_place_id) %>%
-#   summarize(Count = n()) %>%
-#   ggplot() + 
-#   geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
-#   geom_sf(aes(color = q5(Count)), size = 1) + 
-#   scale_fill_manual(values = palette5,
-#                     aesthetics = c("colour", "fill"),
-#                     name = "CBG Count\nQuintile Breaks") +
-#   mapTheme() +
-#   labs(title = "How many different CBGs visit each bar (July)?")
-
+#VISUALIZATIONS
 #Bars continuous
-bars%>%
-  group_by(cbg_dest) %>%
-  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  #Do I use weighted mean here?
-  rename(., GEOID10 = cbg_dest) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  mutate(avg_distance = as.numeric(avg_distance)) %>%
+bars_dest %>%
+  group_by(safegraph_place_id) %>%
+  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
+  left_join(phila, by = "safegraph_place_id") %>%
   st_as_sf() %>%
   ggplot() +
-  geom_sf(aes(fill = avg_distance), color = "transparent") + 
-  geom_sf(data = bars_points, color = "red", size = .2) +
-  scale_fill_viridis() + 
+  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+  geom_sf(aes(color = avg_distance), size = 1) + 
+  scale_fill_viridis(aesthetics = "color") +
   mapTheme() +
-  labs(title = "To which bars do people travel the furthest?")
+  labs(title = "To which bars do visitors travel the furthest?") 
 
-#Bars quintile
-bars%>%
-  group_by(cbg_origin) %>%
-  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  #Do I use weighted mean here?
-  rename(., GEOID10 = cbg_origin) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  mutate(avg_distance = as.numeric(avg_distance)) %>%
+#Bars quintiles
+bars_dest %>%
+  group_by(safegraph_place_id) %>%
+  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
+  left_join(phila, by = "safegraph_place_id") %>%
   st_as_sf() %>%
   ggplot() +
-  geom_sf(aes(fill = q5(avg_distance)), color = "transparent") + 
-  geom_sf(data = bars_points, color = "red", size = .5) +
+  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+  geom_sf(aes(color = q5(avg_distance)), size = 1) + 
   scale_fill_manual(values = palette5,
                     aesthetics = c("colour", "fill"),
                     name = "Average Distance \n(Quintile)") +
   mapTheme() +
-  labs(title = "How far do people travel to bars?")
+  labs(title = "To which bars do visitors travel the furthest?")
+
+
+##RESTAURANTS
+#DATASET
+restaurants_dest <-
+  dat_cbg %>%
+  filter(top_category == "Restaurants and Other Eating Places") %>%
+  st_drop_geometry() %>%
+  rename(., GEOID10 = Visitor_CBG) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  select(safegraph_place_id, 
+         GEOID10, 
+         poi_cbg, 
+         Visitors, 
+         geometry) %>%
+  rename(., cbg_origin = GEOID10,
+         geometry_origin = geometry,
+         cbg_dest = poi_cbg) %>%
+  left_join(phila, by = "safegraph_place_id") %>%
+  select(safegraph_place_id, 
+         top_category, 
+         sub_category, 
+         cbg_origin, 
+         cbg_dest, 
+         Visitors, 
+         geometry_origin, 
+         geometry) %>%
+  rename(., geometry_dest = geometry) %>%
+  drop_na(geometry_origin) %>% #dropping origins outside of philadelphia!
+  mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest))
+
+#VISUALIZATIONS
+#Bars continuous
+restaurants_dest %>%
+  group_by(safegraph_place_id) %>%
+  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
+  left_join(phila, by = "safegraph_place_id") %>%
+  st_as_sf() %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+  geom_sf(aes(color = avg_distance), size = .8) + 
+  scale_fill_viridis(aesthetics = "color") +
+  mapTheme() +
+  labs(title = "To which restaurants do visitors travel the furthest?") 
+
+#Bars quintiles
+restaurants_dest %>%
+  group_by(safegraph_place_id) %>%
+  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
+  left_join(phila, by = "safegraph_place_id") %>%
+  st_as_sf() %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+  geom_sf(aes(color = q5(avg_distance)), size = .8) + 
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "Average Distance \n(Quintile)") +
+  mapTheme() +
+  labs(title = "To which restaurants do visitors travel the furthest?")
+
+
+
+###OLD WORK
+# #install.packages("spdplyr")
+# library(spdplyr)
+# head(arts_dest)
+# 
+# places <- dat2 %>% select(safegraph_place_id, geometry)
+# 
+# arts_dest <- dat_cbg %>%
+#   filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+#            top_category == "Performing Arts Companies") %>%
+#   st_drop_geometry() %>%
+#   rename(., GEOID10 = Visitor_CBG) %>%
+#   left_join(phl_cbg, by = "GEOID10") %>%
+#   select(safegraph_place_id, 
+#          GEOID10, 
+#          Visitors, 
+#          geometry) %>%
+#   rename(., cbg_origin = GEOID10,
+#          geometry_origin = geometry) %>%
+#   left_join(phila, by = "safegraph_place_id") %>%
+#   select(safegraph_place_id, 
+#          top_category, 
+#          sub_category, 
+#          GEOID10, 
+#          cbg_origin, 
+#          Visitors, 
+#          geometry_origin, 
+#          geometry) %>%
+#   rename(., cbg_dest = GEOID10,
+#          geometry_dest = geometry) %>%
+#   drop_na(cbg_origin) %>%
+#   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), st_centroid(geometry_dest)))
+# 
+# #Arts (continuous)
+# arts %>% 
+#   group_by(cbg_dest) %>%
+#   summarize(avg_distance = mean(distance)) %>%
+#   rename(., GEOID10 = cbg_dest) %>%
+#   left_join(phl_cbg, by = "GEOID10") %>%
+#   mutate(avg_distance = as.numeric(avg_distance)) %>% #I think this should be weighted average
+#   st_as_sf() %>%
+#   ggplot() +
+#   geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+#   geom_sf(aes(fill = avg_distance), color = "transparent") + 
+#   geom_sf(data = arts_points, color = "red", size = .8) +
+#   scale_fill_viridis() + 
+#   mapTheme() +
+#   labs(title = "To which performing arts venues do people travel the farthest?") 
+# 
+# #Arts quintile
+# 
+# 
+# 
+# bars_origin <- 
+#   dat_cbg %>%
+#   filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+#   st_drop_geometry() %>%
+#   rename(., GEOID10 = Visitor_CBG) %>%
+#   left_join(phl_cbg, by = "GEOID10") %>%
+#   select(safegraph_place_id, top_category, sub_category, poi_cbg, GEOID10, Visitors, geometry) %>%
+#   rename(., cbg_origin = GEOID10,
+#          GEOID10 = poi_cbg,
+#          geometry_origin = geometry) %>%
+#   left_join(phl_cbg, by = "GEOID10") %>%
+#   select(safegraph_place_id, top_category, sub_category, GEOID10, cbg_origin, Visitors, geometry_origin, geometry) %>%
+#   rename(., cbg_dest = GEOID10,
+#          geometry_dest = geometry) %>%
+#   drop_na(geometry_origin) %>% 
+#   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), st_centroid(geometry_dest)))
+# 
+# dat_cbg %>%
+#   filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+#            top_category == "Performing Arts Companies") %>%
+#   group_by(safegraph_place_id) %>%
+#   summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  #Do I use weighted mean here?
+#   # rename(., GEOID10 = cbg_dest) %>%
+#   # left_join(phl_cbg, by = "GEOID10") %>%
+#   # mutate(avg_distance = as.numeric(avg_distance)) %>%
+#   st_as_sf() %>%
+#   ggplot() +
+#   geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+#   geom_sf(aes(fill = q5(avg_distance)), color = "transparent") + 
+#   # geom_sf(data = arts_points, color = "red", size = .8) +
+#   scale_fill_manual(values = palette5,
+#                     aesthetics = c("colour", "fill"),
+#                     name = "Average Distance \n(Quintile)") +
+#   mapTheme() +
+#   labs(title = "To which performing arts venues do people travel the farthest?") 
+# 
+# 
+# # dat_cbg_visitors %>%
+# #   filter(top_category == "Drinking Places (Alcoholic Beverages)", 
+# #          date_range_start == "2018-01-01T05:00:00Z") %>%
+# #   group_by(safegraph_place_id) %>%
+# #   summarize(Count = n()) %>%
+# #   ggplot() +
+# #   geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+# #   geom_sf(aes(color = q5(Count)), size = 1) + 
+# #   scale_fill_manual(values = palette5,
+# #                     aesthetics = c("colour", "fill"),
+# #                     name = "CBG Count\nQuintile Breaks") +
+# #   mapTheme() +
+# #   labs(title = "How many different CBGs visit each bar (January)?")
+# # 
+# # dat_cbg_visitors %>%
+# #   filter(top_category == "Drinking Places (Alcoholic Beverages)", 
+# #          date_range_start == "2018-07-01T04:00:00Z") %>%
+# #   group_by(safegraph_place_id) %>%
+# #   summarize(Count = n()) %>%
+# #   ggplot() + 
+# #   geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+# #   geom_sf(aes(color = q5(Count)), size = 1) + 
+# #   scale_fill_manual(values = palette5,
+# #                     aesthetics = c("colour", "fill"),
+# #                     name = "CBG Count\nQuintile Breaks") +
+# #   mapTheme() +
+# #   labs(title = "How many different CBGs visit each bar (July)?")
+# 
+# #Bars continuous
+# bars%>%
+#   group_by(cbg_dest) %>%
+#   summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  #Do I use weighted mean here?
+#   rename(., GEOID10 = cbg_dest) %>%
+#   left_join(phl_cbg, by = "GEOID10") %>%
+#   mutate(avg_distance = as.numeric(avg_distance)) %>%
+#   st_as_sf() %>%
+#   ggplot() +
+#   geom_sf(aes(fill = avg_distance), color = "transparent") + 
+#   geom_sf(data = bars_points, color = "red", size = .2) +
+#   scale_fill_viridis() + 
+#   mapTheme() +
+#   labs(title = "To which bars do people travel the furthest?")
+# 
+# #Bars quintile
+# bars%>%
+#   group_by(cbg_origin) %>%
+#   summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  #Do I use weighted mean here?
+#   rename(., GEOID10 = cbg_origin) %>%
+#   left_join(phl_cbg, by = "GEOID10") %>%
+#   mutate(avg_distance = as.numeric(avg_distance)) %>%
+#   st_as_sf() %>%
+#   ggplot() +
+#   geom_sf(aes(fill = q5(avg_distance)), color = "transparent") + 
+#   geom_sf(data = bars_points, color = "red", size = .5) +
+#   scale_fill_manual(values = palette5,
+#                     aesthetics = c("colour", "fill"),
+#                     name = "Average Distance \n(Quintile)") +
+#   mapTheme() +
+#   labs(title = "How far do people travel to bars?")
