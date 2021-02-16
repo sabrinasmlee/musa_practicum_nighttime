@@ -10,14 +10,14 @@ Maddy Kornhauser, Sabrina Lee, Brian Rawn
   - Discussed SafeGraph data accuracy with Eugene.
   - Further refined use case.
   - Continued exploratory analysis:
-  - Origins & destination analysis
-  - Identifying clusters of nightlife in Philadelphia
-  - Nightlife’s relationship to transit
-  - Developing graphics and animations to visualize time
+      - Origins & destination analysis
+      - Identifying clusters of nightlife in Philadelphia
+      - Nightlife’s relationship to transit
+      - Developing graphics and animations to visualize time
   - Meetng with Kae Anderson of the Fishtown BID.
   - Outstanding questions:
-  - How to evaluate quality?
-  - How have foot traffic patterns have changed due to COVID?
+      - How to evaluate quality?
+      - How have foot traffic patterns have changed due to COVID?
 
 ## SafeGraph Accuracy
 
@@ -38,9 +38,9 @@ information on how visitors are counted.
     there. Instead, it is better to look at relative popularity of a
     destination.
   - Suggested strategies for working with this data:
-  - Aggregate at the corridor or neighborhood level.
-  - Remove visitors who stay for a very long time.
-  - Compare relative percentages.
+      - Aggregate at the corridor or neighborhood level.
+      - Remove visitors who stay for a very long time.
+      - Compare relative percentages.
 
 While this information didn’t directly impact this week’s exploratory
 analysis questions, it’s important to keep in mind developing our final
@@ -57,177 +57,6 @@ describign teh “what” and not the “why” of nightlife patterns.
 ## Exploratory Analysis
 
 ### Setup
-
-``` r
-library(tidyverse)
-```
-
-    ## -- Attaching packages -------------------------------------------------------------------- tidyverse 1.3.0 --
-
-    ## v ggplot2 3.3.2     v purrr   0.3.4
-    ## v tibble  3.0.3     v dplyr   1.0.2
-    ## v tidyr   1.1.2     v stringr 1.4.0
-    ## v readr   1.3.1     v forcats 0.5.0
-
-    ## -- Conflicts ----------------------------------------------------------------------- tidyverse_conflicts() --
-    ## x dplyr::filter() masks stats::filter()
-    ## x dplyr::lag()    masks stats::lag()
-
-``` r
-library(sf)
-```
-
-    ## Warning: package 'sf' was built under R version 4.0.3
-
-    ## Linking to GEOS 3.8.0, GDAL 3.0.4, PROJ 6.3.1
-
-``` r
-library(lubridate)
-```
-
-    ## 
-    ## Attaching package: 'lubridate'
-
-    ## The following objects are masked from 'package:base':
-    ## 
-    ##     date, intersect, setdiff, union
-
-``` r
-library(datetime)
-```
-
-    ## Warning: package 'datetime' was built under R version 4.0.3
-
-``` r
-library(viridis)
-```
-
-    ## Loading required package: viridisLite
-
-``` r
-library(gridExtra)
-```
-
-    ## 
-    ## Attaching package: 'gridExtra'
-
-    ## The following object is masked from 'package:dplyr':
-    ## 
-    ##     combine
-
-``` r
-library(kableExtra)
-```
-
-    ## 
-    ## Attaching package: 'kableExtra'
-
-    ## The following object is masked from 'package:dplyr':
-    ## 
-    ##     group_rows
-
-``` r
-library(dplyr)
-library(ggplot2)
-library(gganimate)
-```
-
-    ## Warning: package 'gganimate' was built under R version 4.0.3
-
-``` r
-qBr <- function(df, variable, rnd) {
-  if (missing(rnd)) {
-    as.character(quantile(round(df[[variable]],0),
-                          c(.01,.2,.4,.6,.8), na.rm=T))
-  } else if (rnd == FALSE | rnd == F) {
-    as.character(formatC(quantile(df[[variable]]), digits = 3),
-                 c(.01,.2,.4,.6,.8), na.rm=T)
-  }
-}
-q5 <- function(variable) {as.factor(ntile(variable, 5))}
-palette5 <- viridis_pal()(5)
-mapTheme <- function(base_size = 12) {
-  theme(
-    text = element_text( color = "black"),
-    plot.title = element_text(size = 14,colour = "black"),
-    plot.subtitle=element_text(face="italic"),
-    plot.caption=element_text(hjust=0),
-    axis.ticks = element_blank(),
-    panel.background = element_blank(),axis.title = element_blank(),
-    axis.text = element_blank(),
-    axis.title.x = element_blank(),
-    axis.title.y = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.border = element_rect(colour = "black", fill=NA, size=2)
-  )
-}
-
-setwd("~/GitHub/musa_practicum_nighttime")
-
-###########
-# LOAD DATA
-############
-dat <- read.csv("./data/moves_2018.csv")
-phila <- st_read("./demo/phila.geojson") %>%
-  st_transform('ESRI:102728') %>%
-  st_as_sf()
-```
-
-    ## Reading layer `phila' from data source `C:\Users\mlkor\OneDrive\Documents\GitHub\musa_practicum_nighttime\demo\phila.geojson' using driver `GeoJSON'
-    ## Simple feature collection with 20857 features and 28 fields
-    ## geometry type:  POINT
-    ## dimension:      XY
-    ## bbox:           xmin: -75.27877 ymin: 39.87417 xmax: -74.95779 ymax: 40.13447
-    ## geographic CRS: NAD83
-
-``` r
-dat2 <- dat %>% 
-  dplyr::select(safegraph_place_id, 
-                date_range_start, 
-                date_range_end, 
-                raw_visit_counts,
-                raw_visitor_counts, 
-                visits_by_day, 
-                poi_cbg, 
-                visitor_home_cbgs, 
-                visitor_daytime_cbgs, 
-                visitor_work_cbgs, 
-                visitor_country_of_origin,
-                distance_from_home, 
-                median_dwell, 
-                bucketed_dwell_times, 
-                related_same_day_brand, 
-                related_same_month_brand, 
-                popularity_by_hour, 
-                popularity_by_day, 
-                device_type) %>%
-  left_join(., phila, by = "safegraph_place_id") %>% 
-  st_as_sf()
-
-phl_cbg <- st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson") %>%
-  st_transform('ESRI:102728') %>%
-  mutate(GEOID10 = as.numeric(GEOID10))
-```
-
-    ## Reading layer `Census_Block_Groups_2010' from data source `http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson' using driver `GeoJSON'
-    ## Simple feature collection with 1336 features and 15 fields
-    ## geometry type:  POLYGON
-    ## dimension:      XY
-    ## bbox:           xmin: -75.28031 ymin: 39.86747 xmax: -74.95575 ymax: 40.13793
-    ## geographic CRS: WGS 84
-
-``` r
-phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson") %>%
-  st_transform('ESRI:102728') %>%
-  mutate(CODE = as.numeric(CODE))
-```
-
-    ## Reading layer `Zipcodes_Poly' from data source `http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson' using driver `GeoJSON'
-    ## Simple feature collection with 48 features and 5 fields
-    ## geometry type:  POLYGON
-    ## dimension:      XY
-    ## bbox:           xmin: -75.28031 ymin: 39.86747 xmax: -74.95575 ymax: 40.13793
-    ## geographic CRS: WGS 84
 
 ### Trip Origin: Which areas of Philadelphia travel furthest to nigthlife establishments?
 
@@ -393,33 +222,6 @@ This code compiles the same dataset and visualizations for bars in
 Philadelphia.
 
 ``` r
-bars_origin <- 
-  dat_cbg %>%
-  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
-  st_drop_geometry() %>%
-  rename(., GEOID10 = Visitor_CBG) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  select(safegraph_place_id, 
-         poi_cbg, 
-         GEOID10, 
-         Visitors, 
-         geometry) %>%
-  rename(., cbg_origin = GEOID10,
-         cbg_dest = poi_cbg,
-         geometry_origin = geometry) %>%
-  left_join(phila, by = "safegraph_place_id") %>%
-  select(safegraph_place_id, 
-         top_category, 
-         sub_category, 
-         cbg_dest, 
-         cbg_origin, 
-         Visitors, 
-         geometry_origin, 
-         geometry) %>%
-  rename(., geometry_dest = geometry) %>%
-  drop_na(geometry_origin) %>%
-  mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest))
-
 bars_points <- 
   dat2 %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)") 
@@ -439,7 +241,7 @@ bars_origin %>%
   labs(title = "How far do people travel to bars?")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
 
 ``` r
 #Bars quintile
@@ -460,43 +262,13 @@ bars_origin %>%
   labs(title = "How far do people travel to bars (Quintile)?")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-5-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-6-2.png)<!-- -->
 
 *Restaurants*
 
 Looking at the same graphic for restaurants
 
 ``` r
-restaurants_origin <- dat_cbg %>%
-  filter(top_category == "Restaurants and Other Eating Places") %>%
-  st_drop_geometry() %>%
-  rename(., GEOID10 = Visitor_CBG) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  select(safegraph_place_id, 
-         poi_cbg, 
-         GEOID10, 
-         Visitors, 
-         geometry) %>%
-  rename(., cbg_origin = GEOID10,
-         cbg_dest = poi_cbg,
-         geometry_origin = geometry) %>%
-  left_join(phila, by = "safegraph_place_id") %>%
-  select(safegraph_place_id, 
-         top_category, 
-         sub_category, 
-         cbg_dest, 
-         cbg_origin, 
-         Visitors, 
-         geometry_origin, 
-         geometry) %>%
-  rename(., geometry_dest = geometry) %>%
-  drop_na(geometry_origin) %>%
-  mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest))
-
-restaurant_points <- 
-  dat2 %>%
-  filter(top_category == "Restaurants and Other Eating Places") 
-
 #VISUALIZATIONS
 #All Restaurants continuous
 restaurants_origin %>%
@@ -515,7 +287,7 @@ restaurants_origin %>%
   labs(title = "How far do people travel to restaurants?") 
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 ``` r
 #All Restaurants quintile 
@@ -538,11 +310,11 @@ restaurants_origin %>%
   labs(title = "How far do people travel to restaurants (quintile)?")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-6-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-8-2.png)<!-- -->
 
 The following faceted plot shows the same metric, broken out by
 restaurant sub category.
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-9-2.png)<!-- -->
 
 ### Trip Destinations: How far to visitors travel to each nightlife establishment?
 
@@ -605,7 +377,7 @@ arts_dest %>%
   labs(title = "To which arts venues do visitors travel the furthest?") 
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 ``` r
 #Arts quintiles
@@ -624,42 +396,13 @@ arts_dest %>%
   labs(title = "To which arts venues do visitors travel the furthest?") 
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-8-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-10-2.png)<!-- -->
 
 *Bars*
 
 How far do visitors travel to visit each bar destination?
 
 ``` r
-##BARS
-#DATASET
-bars_dest <-
-  dat_cbg %>%
-  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
-  st_drop_geometry() %>%
-  rename(., GEOID10 = Visitor_CBG) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  select(safegraph_place_id, 
-         GEOID10, 
-         poi_cbg, 
-         Visitors, 
-         geometry) %>%
-  rename(., cbg_origin = GEOID10,
-         geometry_origin = geometry,
-         cbg_dest = poi_cbg) %>%
-  left_join(phila, by = "safegraph_place_id") %>%
-  select(safegraph_place_id, 
-         top_category, 
-         sub_category, 
-         cbg_origin, 
-         cbg_dest, 
-         Visitors, 
-         geometry_origin, 
-         geometry) %>%
-  rename(., geometry_dest = geometry) %>%
-  drop_na(geometry_origin) %>% #dropping origins outside of philadelphia!
-  mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest))
-
 #VISUALIZATIONS
 #Bars continuous
 bars_dest %>%
@@ -675,7 +418,7 @@ bars_dest %>%
   labs(title = "To which bars do visitors travel the furthest?") 
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
 ``` r
 #Bars quintiles
@@ -694,7 +437,7 @@ bars_dest %>%
   labs(title = "To which bars do visitors travel the furthest?")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-9-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-12-2.png)<!-- -->
 
 *Restaurants*
 
@@ -729,7 +472,9 @@ restaurants_dest <-
   rename(., geometry_dest = geometry) %>%
   drop_na(geometry_origin) %>% #dropping origins outside of philadelphia!
   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest))
+```
 
+``` r
 #VISUALIZATIONS
 #Bars continuous
 restaurants_dest %>%
@@ -745,7 +490,7 @@ restaurants_dest %>%
   labs(title = "To which restaurants do visitors travel the furthest?") 
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ``` r
 #Bars quintiles
@@ -764,7 +509,7 @@ restaurants_dest %>%
   labs(title = "To which restaurants do visitors travel the furthest?")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-10-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-14-2.png)<!-- -->
 
 ### Nightlife time patterns
 
@@ -829,7 +574,7 @@ dat_restaurants %>%
   labs(title = "Restaurant Locations at 7pm")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ``` r
 #Merge CBGs with popularity by hour data
@@ -853,7 +598,7 @@ dat_restaurant_filter %>%
   labs(title = "Total Restaurant Visits by CBG") 
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-12-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-16-2.png)<!-- -->
 
 The following animation shows the popularity by hour for Philadelphia
 restaurants.
@@ -886,7 +631,7 @@ restaurant_animation <-
 animate(restaurant_animation, duration=20, renderer = gifski_renderer())
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-13-1.gif)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-17-1.gif)<!-- -->
 
 *Bars*
 
@@ -910,7 +655,7 @@ dat_bars %>%
   labs(title = "Bar Locations and Popularity at 11pm")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 ``` r
 #Merge CBGs with popularity by hour data
@@ -936,7 +681,7 @@ dat_bars_filter %>%
   labs(title = "Total Bar Visits by CBG, 11pm-12am") 
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-14-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-18-2.png)<!-- -->
 
 The following animation shows bar popularity by hour of the day.
 
@@ -968,7 +713,7 @@ bar_animation <-
 animate(bar_animation, duration=20, renderer = gifski_renderer())
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-15-1.gif)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-19-1.gif)<!-- -->
 
 *Additional Popularity by Hour Visualizations*
 
@@ -983,7 +728,7 @@ dat_hour %>%
   labs(title = "Popularity by Hour, Bars in Philadelphia")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 ``` r
 #Plot showing popularity_by_hour for restaurants
@@ -996,7 +741,7 @@ dat_hour %>%
   labs(title = "Popularity by Hour, Restaurants and Other Eating Places in Philadelphia")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-16-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-20-2.png)<!-- -->
 
 ``` r
 #for grocery stores 
@@ -1009,7 +754,7 @@ dat_hour %>%
   labs(title = "Popularity by Hour, Grocery Stores in Philadelphia")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-16-3.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-20-3.png)<!-- -->
 
 ``` r
 #for performing arts companies
@@ -1023,7 +768,7 @@ dat_hour %>%
   labs(title = "Popularity by Hour, Performing Arts Companies in Philadelphia")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-16-4.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-20-4.png)<!-- -->
 
 ### Nightlife spatial clusters
 
@@ -1049,7 +794,7 @@ ggplot() +
   geom_sf(data = fishnet, fill = "#440255", color = "black")
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
 
 ``` r
 #Transform restaurants coordinates (Takes a long time)
@@ -1077,7 +822,7 @@ ggplot() +
   mapTheme()
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-17-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-21-2.png)<!-- -->
 
 ``` r
 #Transform bar coordinates (Takes a long time)
@@ -1105,7 +850,7 @@ ggplot() +
   mapTheme()
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-17-3.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-21-3.png)<!-- -->
 
 ### Nightlife & Transit
 
@@ -1151,7 +896,7 @@ ggplot() +
   mapTheme()
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 ``` r
 #Plot location of bars and Septa Stations
@@ -1166,7 +911,7 @@ ggplot() +
   mapTheme()
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-18-2.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-22-2.png)<!-- -->
 
 # Class 2/9/2021
 
@@ -1277,7 +1022,7 @@ dat_day %>%
   facet_wrap(~sub_category)
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 The same metric for bars (there are no sub-categories).
 
@@ -1292,7 +1037,7 @@ dat_day %>%
   facet_wrap(~sub_category)
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 And for performing arts centers and companies.
 
@@ -1308,4 +1053,4 @@ dat_day %>%
   facet_wrap(~top_category)
 ```
 
-![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](MUSAPracticum_Exploratory_Analysis_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->

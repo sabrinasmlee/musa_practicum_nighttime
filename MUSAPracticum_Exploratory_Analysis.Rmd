@@ -3,7 +3,6 @@ title: "Exploratory Analysis"
 author: "Maddy Kornhauser, Sabrina Lee, Brian Rawn"
 date: "2/4/2021"
 output: rmarkdown::github_document
-code_folding: hide
 editor_options: 
   chunk_output_type: console
 ---
@@ -19,14 +18,14 @@ knitr::opts_chunk$set(echo = TRUE)
 * Discussed SafeGraph data accuracy with Eugene.
 * Further refined use case.
 * Continued exploratory analysis: 
-+ Origins & destination analysis
-+ Identifying clusters of nightlife in Philadelphia
-+ Nightlife's relationship to transit
-+ Developing graphics and animations to visualize time
+  + Origins & destination analysis
+  + Identifying clusters of nightlife in Philadelphia
+  + Nightlife's relationship to transit
+  + Developing graphics and animations to visualize time
 * Meetng with Kae Anderson of the Fishtown BID.
 * Outstanding questions:
-+ How to evaluate quality?
-+ How have foot traffic patterns have changed due to COVID?
+  + How to evaluate quality?
+  + How have foot traffic patterns have changed due to COVID?
 
 ## SafeGraph Accuracy
 
@@ -38,9 +37,9 @@ Last week, we realized that the data tended to show people regularly visiting es
 * Visits in the early morning hours could be people living close by or above the location.
 * Visit count won't be an accurate summary of how many people are there. Instead, it is better to look at relative popularity of a destination.
 * Suggested strategies for working with this data:
-+ Aggregate at the corridor or neighborhood level.
-+ Remove visitors who stay for a very long time.
-+ Compare relative percentages.
+  + Aggregate at the corridor or neighborhood level.
+  + Remove visitors who stay for a very long time.
+  + Compare relative percentages.
 
 While this information didn't directly impact this week's exploratory analysis questions, it's important to keep in mind developing our final deliverable.
 
@@ -53,7 +52,7 @@ _How does nightlife relate to foot traffic in Philadelphia?_
 ## Exploratory Analysis
 
 ### Setup
-```{r echo=TRUE}
+```{r include=FALSE}
 
 library(tidyverse)
 library(sf)
@@ -251,7 +250,7 @@ arts_origin %>%
 *Bars*
 
 This code compiles the same dataset and visualizations for bars in Philadelphia.
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 bars_origin <- 
   dat_cbg %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
@@ -278,7 +277,9 @@ bars_origin <-
   rename(., geometry_dest = geometry) %>%
   drop_na(geometry_origin) %>%
   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest))
+```
 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 bars_points <- 
   dat2 %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)") 
@@ -318,7 +319,7 @@ bars_origin %>%
 *Restaurants*
 
 Looking at the same graphic for restaurants
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 restaurants_origin <- dat_cbg %>%
   filter(top_category == "Restaurants and Other Eating Places") %>%
   st_drop_geometry() %>%
@@ -348,7 +349,9 @@ restaurants_origin <- dat_cbg %>%
 restaurant_points <- 
   dat2 %>%
   filter(top_category == "Restaurants and Other Eating Places") 
+```
 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 #VISUALIZATIONS
 #All Restaurants continuous
 restaurants_origin %>%
@@ -497,7 +500,7 @@ arts_dest %>%
 *Bars*
 
 How far do visitors travel to visit each bar destination?
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 ##BARS
 #DATASET
 bars_dest <-
@@ -526,7 +529,9 @@ bars_dest <-
   rename(., geometry_dest = geometry) %>%
   drop_na(geometry_origin) %>% #dropping origins outside of philadelphia!
   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest))
+```
 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 #VISUALIZATIONS
 #Bars continuous
 bars_dest %>%
@@ -589,7 +594,9 @@ restaurants_dest <-
   rename(., geometry_dest = geometry) %>%
   drop_na(geometry_origin) %>% #dropping origins outside of philadelphia!
   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest))
+```
 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 #VISUALIZATIONS
 #Bars continuous
 restaurants_dest %>%
