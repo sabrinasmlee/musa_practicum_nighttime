@@ -1,10 +1,12 @@
 ---
 title: "MUSA Practicum Nighttime Economy: Exploratory Analysis"
 author: "Maddy Kornhauser, Brian Rawn, Sabrina Lee"
-date: "2/21/2021"
+date: "2/22/2021"
 output:
   github_document:
     toc: true
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -17,11 +19,22 @@ knitr::opts_chunk$set(
 ```
 # 1. Use Case Development
 
-[TBD]
+How can we help business improvement districts (BIDs) and small businesses better understand who is visiting their commercial corridor for nightlife purposes to further economic recovery efforts following the COVID-19 pandemic? 
+
+* *Approach*: Use safegraph data to understand how nightlife patterns differ across commercial corridors in the city. This analysis would allow BIDs and business to understand who is coming to their area for nightlife (avg. income, demographics, and from which areas), where they are coming from, where and when they are visiting, and how these patterns changed before and after COVID-19. 
+
+* *Potential Deliverable*: An interactive economic development tool to help BIDs, small businesses, and other public stakeholders understand how they size up against other commercial corridors in the city and gain basic statistic on their customer base.
 
 # 2. The SafeGraph Dataset
 
-[TBD]
+Safegraph uses anonymized cell phone GPS data to record trips to commercial points of interest. This data can tell us from where a trip was made, what time the trip was made, and how long the individual stated at the point of interest.
+
+* Pros: 
+  + Brand new dataset. 
+  + Lots of unexplored applications and potential insights
+
+* Cons: 
+  + Data is new and has a significant amount of incorrectly attributed trips, especially in urban areas
 
 # 3. Exploratory Data Analysis
 
@@ -135,13 +148,11 @@ phl_nhoods <-
   st_as_sf()
 phl_corridors <- st_read("http://data.phl.opendata.arcgis.com/datasets/f43e5f92d34e41249e7a11f269792d11_0.geojson") %>%
   st_transform('ESRI:102728')
-
-
 ```
 
 ## Philadelphia nightlife establishments
 
-Our first question involve where Philadelhpia nightlife establishments are located across the city. The following maps indicate where in city businesses that contribute to the city's nightlife economy are located. These categories were decided by consulting with the instructors and the Fishtown BID Operations manager. The categories include:
+Our first research question is where Philadelphia nightlife establishments are located across the city. The following maps indicate where businesses that contribute to the city's nightlife economy are located. The categories include:
 
 * Bars (Drinking Places)
 * Restaurants 
@@ -150,6 +161,8 @@ Our first question involve where Philadelhpia nightlife establishments are locat
 * Arts Venues (Promotes of Performing Arts)
 
 Figure 3.1 below shows the spatial patterns of the business categories. Bars and restaurants represent the highest number of businesses which are spread across the city. Hotels are mostly clustered in the central district of the city and near the airport in the southwest portion of the city. There are far fewer casinos and arts venues.
+
+Throughout the analysis, we pay special attention to bars and restaurants, as these organizations are well distributed throughout the city and apply to a local Philadelphia customer base.
 
 ```{r establishment locations}
 dat2 %>%
@@ -168,7 +181,7 @@ dat2 %>%
   mapTheme()
 ```
 
-To look at the spatial patterns another way, we observe the distribution of bars, restaurants and hotels, our largest business categories, with a fishnet grid. Figure 3.2 below demonstrates the spatial patterns of restaurants.  Though restaurants are well distributed throughout the city, there is a distinct cluster in center city.
+To look at the spatial patterns another way, we review the distribution of businesses  with a fishnet grid. The fishnet allows us to visualize clusters and hotspots. Starting first with restaurants, Figure 3.2 below demonstrates the spatial patterns of thsee businesses.  Though restaurants are well distributed throughout the city, there appears to be a higher concentration of yellow cells (indicating a higher count of restaurants) in the central part of the city. This corresponds to what we observe in the point data analysis. 
 ```{r unnesting hour dataset}
 #Unnesting popularity by hour variable
 dat_hour <- 
@@ -201,109 +214,158 @@ phillyBoundary <-
   st_as_sf() 
 
 fishnet <- 
-  st_make_grid(phillyBoundary, cellsize = 2000, square = FALSE) %>%
+  st_make_grid(phillyBoundary, cellsize = 1500, square = FALSE) %>%
   .[phillyBoundary] %>% #MK added this line
   st_sf() %>%
   mutate(uniqueID = rownames(.))
 
-#Plot fishnet
-ggplot() + 
-  geom_sf(data = fishnet, fill = "#440255", color = "black")
+# #Plot fishnet
+# ggplot() +
+#   geom_sf(data = fishnet, fill = "#440255", color = "black")
 
-#Transform restaurants coordinates (Takes a long time)
-dat_restaurants_grid <- 
-  dat_hour %>%
-  filter(top_category == "Restaurants and Other Eating Places") %>%
-  select(geometry) %>%
-  na.omit() %>%
-  st_as_sf() %>%
-  st_transform('ESRI:102728') %>% 
-    distinct()
+#Filter restaurants
+restaurants <- dat2 %>%
+  filter(top_category == "Restaurants and Other Eating Places")%>%
+    st_transform('ESRI:102728')%>%
+  mutate(Legend = "Restaurants")
 
-#Merge restaurants with fishnet  
-restaurant_net <- 
-  dplyr::select(dat_restaurants_grid) %>% 
-  mutate(countRestaurant = 1) %>% 
+#aggregate restaurant count by fishnet cell
+restaurants_net <-
+  dplyr::select(restaurants) %>% 
+  mutate(countRestaurants = 1) %>% 
   aggregate(., fishnet, sum) %>%
-  mutate(countRestaurant = replace_na(countRestaurant, 0),
+  mutate(countRestaurants = replace_na(countRestaurants, 0),
          uniqueID = rownames(.),
-         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
 
 #Plot restaurant fishnet
 ggplot() +
-  geom_sf(data = restaurant_net, aes(fill = countRestaurant)) +
-  scale_fill_viridis(trans = "sqrt") +
-  labs(title = "Count of Restaurants per Grid Space",
+  geom_sf(data = restaurants_net, aes(fill = countRestaurants), color = NA) +
+  scale_fill_viridis() +
+  labs(title = "Count of Restaurants for Fishnet", 
        subtitle = "Figure 3.2") +
   mapTheme()
 ```
 
-Figure 3.3 plots the same map for bars. This also demonstrates a clustering of bars primarily in the central district.
+Similar to restaurants, Figure 3.3 show that bars are also highly concentrated around Center City.
 ```{r bars grid}
-#Transform bar coordinates (Takes a long time)
-dat_bars_grid <- 
-  dat_hour %>%
-  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
-  select(geometry) %>%
-  #na.omit() %>%
-  st_as_sf() %>%
-  st_transform('ESRI:102728') %>%
-    distinct()
+bars <- dat2 %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)")%>%
+    st_transform('ESRI:102728')%>%
+  mutate(Legend = "Bars")
 
-#Merge bars with fishnet
-bar_net <-
-  dplyr::select(dat_bars_grid) %>%
-  mutate(countBar = 1) %>%
+bars_net <-
+  dplyr::select(bars) %>% 
+  mutate(countBars = 1) %>% 
   aggregate(., fishnet, sum) %>%
-  mutate(countBar = replace_na(countBar, 0),
+  mutate(countBars = replace_na(countBars, 0),
          uniqueID = rownames(.),
-         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE)) %>%
+  mutate(Legend = "Bars")
 
-#Plot bar fishnet
 ggplot() +
-  geom_sf(data = bar_net, aes(fill = countBar)) +
-  scale_fill_viridis(trans = "sqrt") +
-  labs(title = "Count of Bars per Grid Space",
+  geom_sf(data = bars_net, aes(fill = countBars), color = NA) +
+  scale_fill_viridis() +
+  labs(title = "Count of Bars per Fishnet",
        subtitle = "Figure 3.3") +
   mapTheme()
 ```
 
-Figure 3.4 shows the number of hotels by grid cell. As we could see above, this figure shows the primary cluster is in Center City with the airport near the city's southwest boundary being a secondary cluster.
-```{r travel accommodation grid}
-#Transform hotel coordinates (Takes a long time)
-dat_hotels_grid <- 
-  dat_hour %>%
-  filter(top_category == "Traveler Accommodation") %>%
-  select(geometry) %>%
-  #na.omit() %>%
-  st_as_sf() %>%
+The location of perfoming arts companies are more sparsely located around the city and less concentrated in Center city, as shown in Figure 3.4 below. 
+```{r}
+performingarts <- dat2 %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
   st_transform('ESRI:102728') %>%
-    distinct()
+  mutate(Legend = "Performing Arts")
 
-#Merge bars with fishnet
-hotels_net <-
-  dplyr::select(dat_hotels_grid) %>%
-  mutate(countHotel = 1) %>%
+performingarts_net <-
+  dplyr::select(performingarts) %>% 
+  mutate(countPerformingarts = 1) %>% 
   aggregate(., fishnet, sum) %>%
-  mutate(countHotel = replace_na(countHotel, 0),
+  mutate(countPerformingarts = replace_na(countPerformingarts, 0),
          uniqueID = rownames(.),
-         cvID = sample(round(nrow(fishnet) / 24), size=nrow(fishnet), replace = TRUE))
-
-#Plot bar fishnet
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
 ggplot() +
-  geom_sf(data = hotels_net, aes(fill = countHotel)) +
-  scale_fill_viridis(trans = "sqrt") +
-  labs(title = "Count of Hotels per Grid Space",
+  geom_sf(data = performingarts_net, aes(fill = countPerformingarts), color = NA) +
+  scale_fill_viridis() +
+  labs(title = "Count of Performing Arts Companies for Fishnet",
        subtitle = "Figure 3.4") +
   mapTheme()
 ```
 
+Figure 3.5 below includes other sectors that contribute to Philadelphia's nightlife economy such as hotels and casinos. This figure combines the fishnets into a single panel that allows us to compare distribution of industries across business type.
+```{r}
+#Casinos
+casinos <- dat2 %>%
+  filter(top_category == "Gambling Industries") %>%
+  st_transform('ESRI:102728') %>%
+  mutate(Legend = "Casinos")
+
+casinos_net <-
+  dplyr::select(casinos) %>% 
+  mutate(countCasinos = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countCasinos = replace_na(countCasinos, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
+
+#Hotels
+hotels <- dat2 %>%
+  filter(top_category == "Traveler Accommodation") %>%
+  st_transform('ESRI:102728') %>%
+  mutate(Legend = "Hotels")
+
+hotels_net <-
+  dplyr::select(hotels) %>% 
+  mutate(countHotels = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countHotels = replace_na(countHotels, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
+
+# Combining fishnets into a single dataframe
+vars_net <- 
+  rbind(restaurants, bars, performingarts, casinos, hotels) %>%
+  st_join(., fishnet, join=st_within) %>%
+  st_drop_geometry() %>%
+  group_by(uniqueID, Legend) %>%
+  dplyr::summarize(count = n()) %>%
+    full_join(fishnet) %>%
+    spread(Legend,count, fill=0) %>%
+    st_sf() %>%
+    dplyr::select(-`<NA>`) %>%
+    na.omit() %>%
+    ungroup()
+
+vars_net.long <- 
+  gather(vars_net, Variable, value, -geometry, -uniqueID)
+
+vars <- unique(vars_net.long$Variable)
+mapList <- list()
+
+#Plotting small multiple maps
+for(i in vars){
+  mapList[[i]] <- 
+    ggplot() +
+      geom_sf(data = filter(vars_net.long, Variable == i), aes(fill=value), colour=NA) +
+      scale_fill_viridis(name="") +
+      labs(title=i) +
+      mapTheme()}
+
+do.call(grid.arrange, c(mapList, ncol=3, top="Count of Nightlife Businesses per Fishnet", bottom = "Figure 3.5"))
+```
+
 ## Nightlife hours
 
-Next we explore when visitors make trips to nightlife establishments. To do this, we worked with the popularity_by_hour SafeGraph variable, which sums the total number of visitors by hour for each month.
+Next, we explore when visitors make trips to nightlife establishments. To do this, we worked with the popularity_by_hour SafeGraph variable, which sums the total number of visitors by hour for each month.
 
-Figure 3.5 shows the average foot traffic by business type over the course of a day. This graphic indicates that though certain business types are considererd part of the nightlife economy, they do not exclusively experience traffic in the evenings.  Restaurants are a good example of this, where the data indicates that the highest levels of traffic occur in the middle of the day. Arts venues, on the other hand, have a clear patterns indicating that they are more popular later in the day.
-
+Figure 3.5 shows the average foot traffic by business type over the course of a day. This graphic indicates that though certain business types are considererd part of the nightlife economy, they do not exclusively experience traffic in the evenings. Restaurants are a good example of this, where the data indicates that the highest levels of traffic occur in the middle of the day. Arts venues, on the other hand, have a clear patterns indicating that they are more popular later in the day.
 ```{r traffic by nightlife establishment}
 dat_hour %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)" |
@@ -313,7 +375,7 @@ dat_hour %>%
            top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
            top_category == "Performing Arts Companies") %>%
   group_by(Hour, top_category) %>%
-  summarize(Visitors = mean(Visitors)) %>%
+  dplyr::summarize(Visitors = mean(Visitors)) %>%
   ggplot(., aes(x = Hour, y = Visitors)) + 
   geom_col() +
   labs(title = "Philadelphia Nightlife Organizations, Average Traffic by Hour",
@@ -321,7 +383,6 @@ dat_hour %>%
   facet_wrap(~top_category, scales = "free") +
   plotTheme()
 ```
-
 
 The following animation shows restaurant visitor counts by census block group over the course of the day. We observe the highest amount of traffic in center city in the middle of the day and then a resurgence of traffic elsewhere in the city in the evening. This suggests that people dine at neighborhood establishments close to their home in the evening.
 ```{r}
@@ -331,9 +392,9 @@ dat_restaurants <-
 
 dat_restaurant_filter <-
   dat_restaurants %>%
-  rename(., GEOID10 = poi_cbg) %>%
-  group_by(GEOID10, Hour) %>%
-  summarize(Avg_Popularity = mean(Visitors),
+  dplyr::rename(., GEOID10 = poi_cbg) %>%
+  dplyr::group_by(GEOID10, Hour) %>%
+  dplyr::summarize(Avg_Popularity = mean(Visitors),
             Total_Visits = sum(Visitors)) %>%
   left_join(phl_cbg) %>% 
   st_as_sf() %>%
@@ -367,7 +428,6 @@ animate(restaurant_animation, duration=20, renderer = gifski_renderer())
 ```
 
 The following animation shows the same metric for bars. We observe traffic increasing throughout the day starting in the afternoon.
-
 ```{r bar animation}
 #Bar Analysis
 #Filter Bars
@@ -377,9 +437,9 @@ dat_bars <- dat_hour %>%
 #Merge CBGs with popularity by hour data
 dat_bars_filter <-
   dat_bars %>%
-  rename(., GEOID10 = poi_cbg) %>%
-  group_by(GEOID10, Hour) %>%
-  summarize(Avg_Popularity = mean(Visitors),
+  dplyr::rename(., GEOID10 = poi_cbg) %>%
+  dplyr::group_by(GEOID10, Hour) %>%
+  dplyr::summarize(Avg_Popularity = mean(Visitors),
             Total_Visits = sum(Visitors)) %>%
   left_join(phl_cbg) %>% 
   st_as_sf() %>%
@@ -408,7 +468,6 @@ bar_animation <-
           panel.grid.minor = element_line(colour = "transparent")) +
     transition_manual(Hour)
 
-
 animate(bar_animation, duration=20, renderer = gifski_renderer())
 ```
 
@@ -421,8 +480,30 @@ Next we explore where visitors come from. Separated by nightlife establishment t
 For business types that are well-dispersed throughout the city, such as bars and restaurants, it appears that visitors typically travel shorter distances. For business types with fewer destinations, such as casinos, or that are clusters in specific areas of the city, such as hotels, it is common for visitors to make longer trips to these destinations.
 
 Census block groups colored grey have no recorded visitors to the business type
-
 ```{r origin data wrangling}
+#Preapring dataset to split out by individual cbgs
+dat_cbg <- 
+  dat2 %>%
+  select(safegraph_place_id, 
+         date_range_start, 
+         top_category, 
+         sub_category, 
+         poi_cbg, 
+         visitor_home_cbgs, 
+         geometry) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>%
+  separate(.,
+           visitor_home_cbgs,
+           c("Visitor_CBG", "Visitors"),
+           sep = ":") %>%
+  mutate(Visitor_CBG = as.numeric(Visitor_CBG),
+         poi_cbg = as.numeric(poi_cbg),
+         Visitors = as.numeric(Visitors))
+
 cbg_origin <- #takes a really long time!
   dat_cbg %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)" |
@@ -432,7 +513,7 @@ cbg_origin <- #takes a really long time!
            top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
            top_category == "Performing Arts Companies") %>% #filter for nightlife establishments
   st_drop_geometry() %>% #drop geometry to join with cbg file
-  rename(., GEOID10 = Visitor_CBG) %>% #renaming to match cbg file
+  dplyr::rename(., GEOID10 = Visitor_CBG) %>% #renaming to match cbg file
   left_join(phl_cbg, by = "GEOID10") %>% # join to cbg file
   select(safegraph_place_id, 
          poi_cbg, 
@@ -456,7 +537,7 @@ cbg_origin <- #takes a really long time!
   mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest)) #calculate distance
 ```
 
-```{r origin viz message=FALSE, warning=FALSE, include=FALSE}
+```{r origin viz, message=FALSE, warning=FALSE, include=FALSE}
 #Continuous
 cbg_origin %>%
   group_by(cbg_origin, top_category) %>%
@@ -573,9 +654,97 @@ cbg_dest %>%
 
 ## Nightlife corridors in Philadelphia
 
-Where are the exisitng nightlife and commercial corridors in Philadelphia? 
+Next, we observe foot traffic along Philadelphia's commercial corridors. This analysis relies on a shapefile from the City of Philadelphia's Planning department which demarcates individual corridors and districts throughout the city. According to the [available metadata](https://metadata.phila.gov/#home/datasetdetails/564236a55737e1f263ae5e3f/representationdetails/56423a4e902dbdd813db9a55/) "locations range from large, regional and specialty destinations to corridors that reflect the evolving economy, culture, and aesthetic traditions of surrounding neighborhoods." This means that the gegoraphies vary in size and character.
 
-[TBD]
+Figure 3.8 below maps the commercial corridors and shows the corridor-wide vacancy rate, which varies from close to 0% to upwards of 60% throughout the city. Smaller corridors in far West Philadelphia, North Philadelphia tend to have the highest vacancy rates.
+```{r}
+###Corridors
+#Load Philadelphia commercial corridors dataset and transform
+corridors <- phl_corridors
+
+dat_restaurants <-
+dat_hour %>%
+  filter(top_category == "Restaurants and Other Eating Places") 
+
+corridors_filter <- corridors %>%
+  select(OBJECTID, NAME, GLA, P_DIST, ST_EXT, PT_ADD, VAC_RATE) %>%
+  mutate(VAC_RATE = str_remove_all(VAC_RATE, pattern = "%")) %>%
+  mutate(VAC_RATE = as.numeric(VAC_RATE)) %>%
+  st_as_sf() 
+# %>%
+#   st_transform('ESRI:102271') 
+  
+# Plot commercial corridors with colors as vacancy rate
+ggplot() +
+  geom_sf(data = phillyBoundary, fill = "black") +
+  geom_sf(data = corridors_filter, aes(fill = VAC_RATE), color = "transparent") +
+  scale_fill_viridis_c(option = "plasma") +
+  labs(title = "Philadelphia Commercial Corridors",
+       subtitle = "Figure 3.8") + 
+  mapTheme()
+
+```
+
+Figure 3.9 below breaks down the count of restaunts in a given corridor per square miile.  We find that central corridors and districts tend to have more restaurants per square mile. Other corridors. That said, corridors across the city have a high concentration of restaurants as well.
+```{r}
+###Restaurants (takes a really long time)
+dat_restaurants_grid <- dat_restaurants %>%
+  select(geometry) %>%
+  na.omit() %>%
+  st_as_sf() %>%
+  #st_transform('ESRI:102271') %>% 
+    distinct()
+
+#Merge restaurants with commercial corridors 
+corridors_restaurants <- 
+  select(dat_restaurants_grid) %>% 
+  mutate(countRestaurant = 1) %>% 
+  aggregate(., corridors_filter, sum) %>%
+  mutate(countRestaurant = replace_na(countRestaurant, 0),
+         uniqueID = rownames(.),
+         area = st_area(geometry) * .00000038610,
+         count_per_mile = as.numeric(countRestaurant / area),
+         cvID = sample(round(nrow(corridors_filter) / 24), size=nrow(corridors_filter), replace = TRUE))
+
+#Plot map of number of restaurants per square mile
+ggplot() +
+  geom_sf(data = phillyBoundary, fill = "black") +
+  geom_sf(data = corridors_restaurants, aes(fill = count_per_mile), color = "transparent") +
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Count of Restaurants per Square Mile in Each Commercial Corridor",
+       subtitle = "Figure 3.9") +
+  mapTheme()
+```
+
+Figure 3.10 shows the number of bars in each commercial corridor per square mile. Again, we see the corridors around Center City generally showing a higher concentration of bars.
+```{r Bars by corridor}
+###Bars
+dat_bars_grid <- dat_bars %>%
+  select(geometry) %>%
+  #na.omit() %>%
+  st_as_sf() %>%
+  # st_transform('ESRI:102271') %>% 
+    distinct()
+  
+corridors_bars <- 
+  dplyr::select(dat_bars_grid) %>% 
+  mutate(countBar = 1) %>% 
+  aggregate(., corridors_filter, sum) %>%
+  mutate(countBar = replace_na(countBar, 0),
+         uniqueID = rownames(.),
+         area = st_area(geometry) * .00000038610,
+         count_per_mile = as.numeric(countBar / area),
+         cvID = sample(round(nrow(corridors_filter) / 24), size=nrow(corridors_filter), replace = TRUE))
+
+#Plot map of number of bars per square mile
+ggplot() +
+  geom_sf(data = phillyBoundary, fill = "black") +
+  geom_sf(data = corridors_bars, aes(fill = count_per_mile), color = "transparent") +
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Count of Bars per Square Mile in Each Commercial Corridor",
+       subtitle = "Figure 3.10") +
+  mapTheme()
+```
 
 ## Neighborhood and corridor comparisons
 
@@ -655,15 +824,15 @@ dat_WGC_cbg <-
   mutate(corridor = "West Girard")
 ```
 
-Figures 3.8a and 3.8b show the volume of visitors to the East Girard Corridor (outlined in red) by census block group. While visitors from across the city frequent East Girard corridor, particularly for its restaurants, Figure 3.8b clarifies that the corridor mostly caters to a local customer base of surrounding census tracts.
+Figures 3.11a and 3.11b show the volume of visitors to the East Girard Corridor (outlined in red) by census block group. While visitors from across the city frequent East Girard corridor, particularly for its restaurants, Figure 3.11b clarifies that the corridor mostly caters to a local customer base of surrounding census tracts.
 
 Block groups shaded gray indicate that no resident made a trip to this corridor.
 ```{r}
 dat_EGC_cbg %>%
-  group_by(cbg_origin, top_category) %>%
-  summarize(visitors = sum(visitors)) %>%
+  dplyr::group_by(cbg_origin, top_category) %>%
+  dplyr::summarize(visitors = sum(visitors)) %>%
   st_drop_geometry() %>%
-  rename(., GEOID10 = cbg_origin) %>%
+  dplyr::rename(., GEOID10 = cbg_origin) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
   st_as_sf() %>%
   drop_na(geometry) %>% 
@@ -677,14 +846,14 @@ dat_EGC_cbg %>%
                     name = "Visitor Count \n(Quintile)") +
   mapTheme() +
   labs(title = "East Girard Restaurants: Where do visitors come from?",
-       subtitle = "Figure 3.8a") +
+       subtitle = "Figure 3.11a") +
   facet_wrap(~top_category)
 
 dat_EGC_cbg %>%
-  group_by(cbg_origin, top_category) %>%
-  summarize(visitors = sum(visitors)) %>%
+  dplyr::group_by(cbg_origin, top_category) %>%
+  dplyr::summarize(visitors = sum(visitors)) %>%
   st_drop_geometry() %>%
-  rename(., GEOID10 = cbg_origin) %>%
+  dplyr::rename(., GEOID10 = cbg_origin) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
   st_as_sf() %>%
   drop_na(geometry) %>% 
@@ -700,20 +869,15 @@ dat_EGC_cbg %>%
   facet_wrap(~top_category)
 ```
 
-Figures 3.9a and 3.9b show the volume of visitors to West Girard corridor. While the corridor appears to draw visitors from fewer census tracts overall, the corridor draws from a similarly local customer base of the surrounding block groups.
+Figures 3.12a and 3.12b show the volume of visitors to West Girard corridor. While the corridor appears to draw visitors from fewer census tracts overall, the corridor draws from a similarly local customer base of the surrounding block groups.
 
 As before, block groups shaded gray have no residents that made trips to this corridor.
 ```{r West Girard viz}
-dat_corridors %>%
-  ggplot() +
-  geom_sf(data = phl_cbg, fill = "grey80", color = "transparent") +
-  geom_sf(data = phl_corridors, aes(fill = P_DIST))
-
 dat_WGC_cbg %>%
-  group_by(cbg_origin, top_category) %>%
-  summarize(visitors = sum(visitors)) %>%
+  dplyr::group_by(cbg_origin, top_category) %>%
+  dplyr::summarize(visitors = sum(visitors)) %>%
   st_drop_geometry() %>%
-  rename(., GEOID10 = cbg_origin) %>%
+  dplyr::rename(., GEOID10 = cbg_origin) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
   st_as_sf() %>%
   drop_na(geometry) %>% 
@@ -727,14 +891,14 @@ dat_WGC_cbg %>%
                     name = "Visitor Count \n(Quintile)") +
   mapTheme() +
   labs(title = "West Girard: Where do visitors come from?",
-       subtitle = "Figure 3.9a") +
+       subtitle = "Figure 3.12a") +
   facet_wrap(~top_category)
 
 dat_WGC_cbg %>%
-  group_by(cbg_origin, top_category) %>%
-  summarize(visitors = sum(visitors)) %>%
+  dplyr::group_by(cbg_origin, top_category) %>%
+  dplyr::summarize(visitors = sum(visitors)) %>%
   st_drop_geometry() %>%
-  rename(., GEOID10 = cbg_origin) %>%
+  dplyr::rename(., GEOID10 = cbg_origin) %>%
   left_join(phl_cbg, by = "GEOID10") %>%
   st_as_sf() %>%
   drop_na(geometry) %>% 
@@ -746,11 +910,11 @@ dat_WGC_cbg %>%
   scale_fill_viridis() +
   mapTheme() +
   labs(title = "East Girard Restaurants: Where do visitors come from?",
-       subtitle = "Figure 3.9b") +
+       subtitle = "Figure 3.12b") +
   facet_wrap(~top_category)
 ```
 
-We can deepen our analysis by tying the trip origins to census data. This allows us to construct a customer profile of the visitors visiting specific corridors throughout the city.
+We can further explore the individual corridor analysis by tying the trip origins to census data. This allows us to construct a customer profile of the people visiting specific corridors throughout the city.
 ```{r census pull}
 phl_blockgroups <- 
   get_acs(geography = "block group", 
@@ -777,7 +941,7 @@ phl_blockgroups <-
   dplyr::select(-Whites) 
 ```
 
-The below Figure 3.XX compares demographic indicators pulled from the census across the two customer bases. East Girard corridor's customer base, shown in purple, tend to come from whiter census tracts with a higher median household income and median rent. West Girard corridor's customer base tend to come from less white census tracts with lower incomes and median rent. Both corridors, however, pull from census tracts with a similar median age.
+The below Figure 3.13 compares demographic indicators pulled from the census across the two customer bases. East Girard corridor's customer base, shown in purple, tend to come from whiter census tracts with a higher median household income and median rent. West Girard corridor's customer base tend to come from less white census tracts with lower incomes and median rent. Both corridors, however, pull from census tracts with a similar median age.
 ```{r corridor comparison}
 rbind(dat_EGC_cbg, dat_WGC_cbg) %>%
   rename(GEOID10 = cbg_origin) %>%
@@ -796,7 +960,7 @@ rbind(dat_EGC_cbg, dat_WGC_cbg) %>%
   facet_wrap( ~ variable, scales = "free") +
   plotTheme() +
   labs(title = 'East Girard vs. West Girard Corridors',
-       subtitle = "Figure 3.XX")
+       subtitle = "Figure 3.13")
 ```
 
 # 4. Next Steps
