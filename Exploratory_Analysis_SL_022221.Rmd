@@ -1,0 +1,657 @@
+---
+title: "Exploratory Analysis"
+author: "Maddy Kornhauser, Sabrina Lee, Brian Rawn"
+date: "2/4/2021"
+output: rmarkdown::github_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Class 2/9/2021
+
+## General Updates
+
+* Connected with Andrew last week and are coordinating on some additional data (2019 moves, normalization information).
+* Refined our use case.
+* Looked into using Yelp data.
+* Begun exploratory analysis.
+
+## Use Case
+
+Last week, our use case was focused on the causal effects of nightlife. Not only is this very difficult to measure, there are a number of problems associated with underlying bias in  data we would use to measure negative externalties.
+
+This week, we have split our use case into two parts - one to frame our exploratory analysis, and a second (WIP) to frame the public policy tool we will ultimately buid.
+
+* *Exploratory analysis use case*: How does the location of nightlife establishments impact foot traffic in Philadelphia?
+
+* *Public policy use case*: How far are people willing to travel for nightlife establishments? How much foot traffic can we expect in a given nightlife corridor?
+
+By developing a tool to measure how nightlife establishments impact foot traffic (a proxy for commercial activity), community groups and councils can quickly ascertain the demand for nightlife in certain areas of Philadelphia. This tool will help stakeholders make informed decisions when siting and issuing permits and licenses for future nightlife establishments.
+
+## Yelp data
+
+There is a [Yelp Open Dataset](https://www.yelp.com/dataset) with a subset of businesses, reviews and user data that is available for academic purposes.  Unfortunately, this data is only availabe for a selection of cities that do not include Philadelphia.
+
+Alternatively, we can plug into the Yelp API and pull Philadelphia data meeting various search criteria. Based on online articles (see [here](https://billpetti.github.io/2017-12-23-use-yelp-api-r-rstats/) and [here](https://rpubs.com/fitzpatrickm8/yelpapi)) we wrote a script that can queries the Yelp API. This is also saved on the repo. There are some limitations:
+
+* It appears that you cannot pull more than 50 search results at a time based on a search term.
+* It's not clear how search results are ordered.
+* How would we match this up against the SafeGraph data?  There is coordinate infromation and names of stores, but we can forsee some issues here.
+* Like the 311 and crime data, we have to consider the underying bias of the Yelp data. Is this reliable?
+
+## Exploratory Analysis
+
+This week, we have focused on exploring the 2018 SafeGraph dataset and answering the following questions.
+
+* Where and how far are people travelling from? 
+* When are people travelling?
+* What is the number of visits/visitors? Is there seasonality in the mobility patterns? Weekly patterns?
+* Where does nightlife happen?
+* Where are the major nightlife corridors?
+* How long do people spend in establishments?  What is the median dwell time?
+
+### Setup
+
+```{r include=FALSE}
+
+library(tidyverse)
+library(sf)
+library(lubridate)
+library(datetime)
+library(viridis)
+library(gridExtra)
+library(RSocrata)
+library(plyr)
+
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 3),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+palette5 <- viridis_pal()(5)
+mapTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2)
+  )
+}
+
+setwd("~/documents/GitHub/musa_practicum_nighttime")
+
+###########
+# LOAD DATA
+############
+dat <- read.csv("./data/moves_2018.csv")
+phila <- st_read("./demo/phila.geojson")
+
+# join datasets 
+dat2 <- dat %>% 
+  dplyr::select(safegraph_place_id, date_range_start, date_range_end, raw_visit_counts,
+                       raw_visitor_counts, visits_by_day, poi_cbg, visitor_home_cbgs, 
+                       visitor_daytime_cbgs, visitor_work_cbgs, visitor_country_of_origin,
+                       distance_from_home, median_dwell, bucketed_dwell_times, related_same_day_brand, 
+                       related_same_month_brand, popularity_by_hour, popularity_by_day, device_type) %>%
+  # mutate(date_range_start = as.date(dat$date_range_start),
+  #        date_range_end = as.date(dat$date_range_end)) %>%
+  left_join(., phila, by = "safegraph_place_id") %>% 
+  st_as_sf()
+
+phl_cbg <- st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson") %>%
+  mutate(GEOID10 = as.numeric(GEOID10))
+phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson") %>%
+  mutate(CODE = as.numeric(CODE))
+
+
+```
+
+# Creating fishnet
+Creating a fishnet with 500 x 500 foot grid cells, which is used to treat the siting of bars and restaurants, as well as trips, as a phenomenon that varies across space, and to aggregate point-level data.
+```{r}
+PHLboundaries <- st_read("http://data.phl.opendata.arcgis.com/datasets/405ec3da942d4e20869d4e1449a2be48_0.geojson")%>%
+    st_transform('ESRI:102271')
+
+fishnet <- 
+  st_make_grid(PHLboundaries, 
+               cellsize=750,
+               square = FALSE) %>%
+  st_sf() %>%
+  mutate(uniqueID = rownames(.))
+
+# Plot fishnet
+ggplot() + 
+  geom_sf(data=fishnet, fill="#440255", color="black")
+  
+```
+
+# Visualising where restaurants are in the city of Philadelphia 
+The point data map shows us that there is a clustering of restaurants in the center city of Philadelphia. 
+
+```{r}
+ggplot() + 
+  geom_sf(data=PHLboundaries) +
+  geom_sf(data= dat2 %>%
+  filter(top_category == "Restaurants and Other Eating Places",
+         date_range_start == "2018-01-01T05:00:00Z")) +
+  labs(title="Restaurants in Philadelphia") +
+  mapTheme()
+
+```
+
+
+### Joining restaurants to fishnet 
+The figure below shows count of restaurants within each grid cell of the fishnet. This allows us to use the fishnet grid to visualize clusters as restaurant hotspots. There appears to be a higher concentration of yellow cells (with higher count of restaurants) in the central part of the city, which corresponds to what we observe in the point data map above. 
+```{r}
+restaurants <- dat2 %>%
+  filter(top_category == "Restaurants and Other Eating Places",
+         date_range_start == "2018-01-01T05:00:00Z")%>%
+    st_transform('ESRI:102271')%>%
+  mutate(Legend = "Restaurants")
+
+
+restaurants_net <-
+  dplyr::select(restaurants) %>% 
+  mutate(countRestaurants = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countRestaurants = replace_na(countRestaurants, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
+ggplot() +
+  geom_sf(data = restaurants_net, aes(fill = countRestaurants), color = NA) +
+  scale_fill_viridis() +
+  labs(title = "Count of Restaurants for Fishnet") +
+  mapTheme()
+```
+
+## Visualizing various categories of nighttime establishments 
+
+Similar to restaurants, bars are highly concentrated around center city. 
+
+```{r}
+bars <- dat2 %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)")%>%
+    st_transform('ESRI:102271')%>%
+  mutate(Legend = "Bars")
+
+bars_net <-
+  dplyr::select(bars) %>% 
+  mutate(countBars = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countBars = replace_na(countBars, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE)) %>%
+  mutate(Legend = "Bars")
+
+ggplot() +
+  geom_sf(data = bars_net, aes(fill = countBars), color = NA) +
+  scale_fill_viridis() +
+  labs(title = "Count of Bars for Fishnet") +
+  mapTheme()
+```
+
+The location of perfoming arts companies are more sparsely located around the city, and less concentrated in center city. 
+
+```{r}
+performingarts <- dat2 %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  st_transform('ESRI:102271')%>%
+  mutate(Legend = "Performing Arts")
+
+performingarts_net <-
+  dplyr::select(performingarts) %>% 
+  mutate(countPerformingarts = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countPerformingarts = replace_na(countPerformingarts, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
+ggplot() +
+  geom_sf(data = performingarts_net, aes(fill = countPerformingarts), color = NA) +
+  scale_fill_viridis() +
+  labs(title = "Count of Performing Arts Companies for Fishnet") +
+  mapTheme()
+```
+
+## Combining fishnets for count of bars, restaurants and perfoming arts 
+```{r}
+# Count of trips to bars 
+
+vars_net <- 
+  rbind(restaurants, bars, performingarts) %>%
+  st_join(., fishnet, join=st_within) %>%
+  st_drop_geometry() %>%
+  group_by(uniqueID, Legend) %>%
+  summarize(count = n()) %>%
+    full_join(fishnet) %>%
+    spread(Legend,count, fill=0) %>%
+    st_sf() %>%
+    dplyr::select(-`<NA>`) %>%
+    na.omit() %>%
+    ungroup()
+
+```
+
+```{r}
+vars_net.long <- 
+  gather(vars_net, Variable, value, -geometry, -uniqueID)
+
+vars <- unique(vars_net.long$Variable)
+mapList <- list()
+
+for(i in vars){
+  mapList[[i]] <- 
+    ggplot() +
+      geom_sf(data = filter(vars_net.long, Variable == i), aes(fill=value), colour=NA) +
+      scale_fill_viridis(name="") +
+      labs(title=i) +
+      mapTheme()}
+
+do.call(grid.arrange,c(mapList, ncol=3, top="Count of Bars, Performing Arts Locations and Restaurants by Fishnet"))
+```
+
+## Fishnet of Visitor Counts
+
+As can be seen from the fishnet, there is a concentration of visitors in the center and eastern parts of the city. 
+
+```{r}
+dat_visitor_counts <- dat %>%
+  select(safegraph_place_id,
+         raw_visit_counts, 
+         raw_visitor_counts, 
+         median_dwell, 
+         distance_from_home)%>%
+  group_by(safegraph_place_id) %>%
+  summarize(Total_Visitors = sum(raw_visitor_counts))
+
+```
+
+
+```{r}
+visitorcounts <- 
+  dat_cbg2 %>%
+  select(Total_Visitors)%>%
+  mutate(Legend = "Visitor Counts") %>%
+  st_transform(st_crs(fishnet)) %>%
+   # dplyr::select(-`<NA>`) %>%
+    na.omit() %>%
+    ungroup()
+  
+counts_net <- 
+  rbind.fill(visitorcounts) %>%
+  st_join(., fishnet, join=st_within) %>%
+  st_drop_geometry() %>%
+  group_by(uniqueID, Legend) %>%
+  summarize(count = n()) %>%
+    full_join(fishnet) %>%
+    spread(Legend, count, fill=0) %>%
+    st_sf() %>%
+    dplyr::select(-`<NA>`) %>%
+    na.omit() %>%
+    ungroup()
+
+counts_net.long <- 
+  gather(counts_net, Variable, value, -geometry, -uniqueID)
+
+counts <- unique(counts_net.long$Variable)
+mapList <- list()
+
+for(i in counts){
+  mapList[[i]] <- 
+    ggplot() +
+      geom_sf(data = filter(counts_net.long, Variable == i), aes(fill=value), colour=NA) +
+      scale_fill_viridis(name="") +
+      labs(title=i) +
+      mapTheme()}
+
+do.call(grid.arrange,c(mapList, ncol=1))
+
+```
+
+## Heatmap of Visitor Counts
+
+```{r}
+# Read in nn_function 
+
+nn_function <- function(measureFrom,measureTo,k) {
+  measureFrom_Matrix <-
+    as.matrix(measureFrom)
+  measureTo_Matrix <-
+    as.matrix(measureTo)
+  nn <-   
+    get.knnx(measureTo, measureFrom, k)$nn.dist
+  output <-
+    as.data.frame(nn) %>%
+    rownames_to_column(var = "thisPoint") %>%
+    gather(points, point_distance, V1:ncol(.)) %>%
+    arrange(as.numeric(thisPoint)) %>%
+    group_by(thisPoint) %>%
+    summarize(pointDistance = mean(point_distance)) %>%
+    arrange(as.numeric(thisPoint)) %>% 
+    dplyr::select(-thisPoint) %>%
+    pull()
+  
+  return(output)  
+}
+
+
+```
+
+
+```{r}
+st_c <- st_coordinates
+st_coid <- st_centroid
+
+visitor_counts.nn <-
+  counts_net %>%
+    mutate(
+      rbind.fill(visitor_counts.nn =
+        nn_function(st_c(st_coid(counts_net)), st_c(visitorcounts),3)))
+
+counts_net.long.nn <- 
+  dplyr::select(counts_net, ends_with(".nn")) 
+
+ggplot() +
+ geom_sf(data = counts_net, aes(fill=counts_net.long.nn), colour=NA) +
+  scale_fill_viridis(name="") +
+  labs() +
+  mapTheme()
+
+```
+
+
+### Where and how far are people travelling from?
+
+The following maps break down the count of different CBGs by point of interest and sectors that contribute to the nighttime economy. Looking first at restaurants, we see that locations that attract the most CBGs are located primarily in Center City and along transit lines. Because of so many restaurants, we have shown a map during summer and winter.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_cbg_visitors <- 
+  dat2 %>%
+  select(safegraph_place_id, date_range_start, top_category, sub_category, poi_cbg, visitor_home_cbgs, geometry) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>%
+  separate(.,
+           visitor_home_cbgs,
+           c("Visitor_CBG", "Visitors"),
+           sep = ":") %>%
+  mutate(Visitor_CBG = as.numeric(Visitor_CBG),
+         poi_cbg = as.numeric(poi_cbg),
+         Visitors = as.numeric(Visitors))
+
+#Restaurants
+restaurants_cbg_jan <- 
+  dat_cbg_visitors %>%
+  filter(top_category == "Restaurants and Other Eating Places",
+         date_range_start == "2018-01-01T05:00:00Z") %>%
+  group_by(safegraph_place_id) %>%
+  summarize(Count = n()) %>%
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = .5) + 
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuintile Breaks") +
+  mapTheme() +
+  labs(title = "How many different CBGs visit \neach restaurant? (January)")
+
+restaurants_cbg_jul <- 
+  dat_cbg_visitors %>%
+  filter(top_category == "Restaurants and Other Eating Places",
+         date_range_start == "2018-07-01T04:00:00Z") %>%
+  group_by(safegraph_place_id) %>%
+  summarize(Count = n()) %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = .5) +
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuintile Breaks") +
+  mapTheme() +
+  labs(title = "How many different CBGs visit \neach restaurant (July)?")
+
+grid.arrange(restaurants_cbg_jan, restaurants_cbg_jul, nrow = 1)
+```
+
+The following maps look at the number of CBGs per location for bars and concert/performance venues.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Bars
+bars_cbg <-
+  dat_cbg_visitors %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+  group_by(safegraph_place_id) %>%
+  summarize(Count = n()) %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = 1) + 
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuintile Breaks") +
+  mapTheme() +
+  labs(title = "How many different CBGs visit bars?")
+
+#Concert Venues
+concert_cbg <-
+  dat_cbg_visitors %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  group_by(safegraph_place_id) %>%
+  summarize(Count = n()) %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = 1) + 
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuintile Breaks") +
+  mapTheme() +
+  labs(title = "How many different CBGs visit \nconcert venues and performing arts venues?")
+
+grid.arrange(bars_cbg, concert_cbg, nrow = 1)
+```
+
+### When are people travelling?
+
+The following charts looks at the average visits by day in restaurants and other eating places. This shows the patterns for each of the subcategory under restaurant. 
+
+We see an increase throughout the week until Friday and then decreased traffic over the weekend. This likely reflects the workforce that isn't coming into the city over the weekends.
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_day <- 
+  dat2 %>% 
+  select(safegraph_place_id, top_category, sub_category, popularity_by_day) %>%
+  mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = "\\[|\\]")) %>%
+  mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = "\\{|\\}")) %>%
+  mutate(popularity_by_day = str_remove_all(popularity_by_day, pattern = '\\"|\\"')) %>% 
+  mutate(popularity_by_day = str_split(popularity_by_day, pattern = ",")) %>%
+  unnest(popularity_by_day) %>%
+  separate(.,
+           popularity_by_day,
+           c("Day", "Visits"),
+           sep = ":") %>%
+  mutate(Visits = as.numeric(Visits))
+
+week_order = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+
+dat_day %>%
+  filter(top_category == "Restaurants and Other Eating Places") %>%
+  group_by(sub_category, Day) %>%
+  summarize(Avg_Visits = mean(Visits)) %>%
+  mutate(Day = factor(Day, levels = week_order)) %>% arrange(Day) %>% #order by day of the week
+  ggplot(., aes(x = Day, y = Avg_Visits)) + 
+  geom_col() +
+  facet_wrap(~sub_category)
+```
+
+The same metric for bars (there are no sub-categories).
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_day %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+  group_by(sub_category, Day) %>%
+  summarize(Avg_Visits = mean(Visits)) %>%
+  mutate(Day = factor(Day, levels = week_order)) %>% arrange(Day) %>% #order by day of the week
+  ggplot(., aes(x = Day, y = Avg_Visits)) + 
+  geom_col() +
+  facet_wrap(~sub_category)
+
+```
+
+And for performing arts centers and companies.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_day %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  group_by(top_category, Day) %>%
+  summarize(Avg_Visits = mean(Visits)) %>%
+  mutate(Day = factor(Day, levels = week_order)) %>% arrange(Day) %>% #order by day of the week
+  ggplot(., aes(x = Day, y = Avg_Visits)) + 
+  geom_col() +
+  facet_wrap(~top_category)
+```
+
+Turning to traffic by hour of the day, the following chart shows foot average foot traffic in restaurants.  We have split them out by sub-category. At this level, it appears that most restaurant traffic does not occur at night, but rather in the middle of the day.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+dat_hour <- 
+  dat2 %>% 
+  select(safegraph_place_id, top_category, sub_category, popularity_by_hour) %>%
+  mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
+  unnest(popularity_by_hour) %>%
+  separate(.,
+           popularity_by_hour,
+           c("0", "1", "2", "3", "4", "5", "6", 
+             "7", "8", "9", "10", "11", "12", 
+             "13", "14", "15", "16", "17", "18",
+             "19", "20", "21", "22", "23"),
+           sep = ",") %>%
+  pivot_longer(cols = 4:27,
+               names_to = "Hour",
+               values_to = "Count") %>%
+  mutate(Hour = as.numeric(Hour),
+         Count = as.numeric(Count))
+
+#Restaurants
+dat_hour %>%
+  filter(top_category == "Restaurants and Other Eating Places") %>%
+  group_by(sub_category, Hour) %>%
+  summarize(Avg_Visits = mean(Count)) %>%
+  ggplot(., aes(x = Hour, y = Avg_Visits)) + 
+  geom_col() +
+  facet_wrap(~sub_category)
+
+```
+
+We have also include the same metric for bars, which show a stronger pattern towards nighttime traffic. 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Bars
+dat_hour %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+  group_by(sub_category, Hour) %>%
+  summarize(Avg_Visits = mean(Count)) %>%
+  ggplot(., aes(x = Hour, y = Avg_Visits)) + 
+  geom_col() +
+  labs(title = "Average Traffic by Hour in Philadelphia Bars")
+```
+
+Same for concert venues and performing arts spaces, which have a high amount of traffic in the evening and early morning hours.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Concert Venues
+dat_hour %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  group_by(top_category, Hour) %>%
+  summarize(Avg_Visits = mean(Count)) %>%
+  ggplot(., aes(x = Hour, y = Avg_Visits)) + 
+  geom_col() +
+  facet_wrap(~top_category)
+```
+
+### Number of visits/vistors. Seasonality/weekly patterns?
+
+[TBD]
+
+### Where does nightlife happen?
+
+```{r}
+#Census Block Groups
+dat_cbg2 <-
+  dat %>%
+  select(safegraph_place_id,
+         poi_cbg, 
+         raw_visit_counts, 
+         raw_visitor_counts, 
+         median_dwell, 
+         distance_from_home)%>%
+  rename(., GEOID10 = poi_cbg) %>%
+  group_by(GEOID10) %>%
+  summarize(Avg_Visits = mean(raw_visit_counts),
+            Avg_Visitors = mean(raw_visitor_counts),
+            Total_Visits = sum(raw_visit_counts),
+            Total_Visitors = sum(raw_visitor_counts),
+            Avg_Dwell = mean(median_dwell),
+            Avg_DistHome = mean(distance_from_home)) %>%
+  left_join(phl_cbg) %>% 
+  st_as_sf() %>%
+  mutate(Visits_Per_Area = Total_Visits / Shape__Area) %>%
+  mutate(Visitors_Per_Area = Total_Visitors / Shape__Area)
+
+dat_cbg2 %>%
+  subset(Total_Visits < 1900000) %>% #removing outliers to see patterns in the data
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Total_Visits), color = "transparent") + 
+  scale_fill_viridis() +
+  labs(title = "Total SafeGraph Visits by CBG")
+
+dat_cbg2 %>%
+  subset(Total_Visitors < 1900000) %>% #removing outliers to see patterns in the data
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Total_Visits), color = "transparent") + 
+  scale_fill_viridis() +
+  labs(title = "Total SafeGraph Visitors by CBG")
+
+dat_cbg2 %>%
+  #subset(Avg_Visits < 1500) %>% #removing outliers to see patterns in the data
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+  scale_fill_viridis() +
+  labs(title = "Total SafeGraph Visits by CBG, Adjusted by CBG Area")
+
+dat_cbg2 %>%
+  #subset(Avg_Visits < 1500) %>% #removing outliers to see patterns in the data
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(fill = Visitors_Per_Area), color = "transparent") + 
+  scale_fill_viridis() +
+  labs(title = "Total SafeGraph Visitors by CBG, Adjusted by CBG Area")
+
+```
+
+### What are the major nightlife corridors?
+
+[TBD]
+
+### How long do people spend in establishments?
+
+[TBD]
