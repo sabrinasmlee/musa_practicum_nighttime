@@ -778,3 +778,79 @@ dat_corridors <-
                     name = "Corridor") +
   facet_wrap( ~ variable, scales = "free") +
   plotTheme() 
+
+
+
+# dat_corridors <-
+#   dat2[phl_corridors,] %>%
+#   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+#   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+#   mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+#   mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+#   unnest(visitor_home_cbgs) %>%
+#   separate(.,
+#            visitor_home_cbgs,
+#            c("cbg_origin", "visitors"),
+#            sep = ":") %>%
+#   mutate(cbg_origin = as.numeric(cbg_origin),
+#          visitors = as.numeric(visitors)) %>%
+#   filter(top_category == "Drinking Places (Alcoholic Beverages)" |
+#            top_category == "Restaurants and Other Eating Places" |
+#            top_category == "Traveler Accommodation" |
+#            top_category == "Gambling Industries" |
+#            top_category == "Promoters of Performing Arts, Sports, and Similar Events") %>%
+#   st_join(phl_corridors) %>%
+#   select(safegraph_place_id, 
+#          date_range_start, 
+#          top_category, 
+#          sub_category, 
+#          cbg_origin,
+#          visitors,
+#          NAME.y,
+#          P_DIST,
+#          geometry)
+# 
+# dat_corridors %>%
+#   ggplot() +
+#   geom_sf(data = phl_cbg, fill = "grey80", color = "transparent") +
+#   geom_sf(data = phl_corridors, aes(fill = P_DIST))
+# 
+# 
+# dat_corridors %>%
+#   group_by(cbg_origin, P_DIST) %>%
+#   summarize(visitors = sum(visitors)) %>%
+#   st_drop_geometry() %>%
+#   rename(., GEOID10 = cbg_origin) %>%
+#   left_join(phl_cbg, by = "GEOID10") %>%
+#   st_as_sf() %>%
+#   drop_na(geometry) %>% 
+#   ggplot() +
+#   geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+#   geom_sf(aes(fill = visitors, geometry = geometry), color = "transparent") + 
+#   geom_sf(data = phl_nhoods, color = "white", fill = "transparent") +
+#   geom_sf(data = WestGirard_corr, color = "red", fill = "transparent", lwd = .5) +
+#   scale_fill_viridis() +
+#   mapTheme() +
+#   labs(title = "East Girard Restaurants: Where do visitors come from?") +
+#   facet_wrap(~top_category)
+# 
+# dat_corridors %>%
+#   filter(top_category == "Restaurants and Other Eating Places") %>%
+#   group_by(cbg_origin, P_DIST) %>%
+#   summarize(visitors = sum(visitors)) %>%
+#   st_drop_geometry() %>%
+#   rename(., GEOID10 = cbg_origin) %>%
+#   left_join(phl_cbg, by = "GEOID10") %>%
+#   st_as_sf() %>%
+#   drop_na(geometry) %>%
+#   ggplot() +
+#   geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+#   geom_sf(aes(fill = q5(visitors), geometry = geometry), color = "transparent") + 
+#   geom_sf(data = phl_nhoods, color = "white", fill = "transparent") +
+#   geom_sf(data = fishtown, color = "red", fill = "transparent", lwd = 1) +
+#   scale_fill_manual(values = palette5,
+#                     aesthetics = c("colour", "fill"),
+#                     name = "Visitor Count \n(Quintile)") +
+#   mapTheme() +
+#   labs(title = "Central District Restaurants: Where do visitors come from?") %>%
+#   facet_wrap(~P_DIST)
