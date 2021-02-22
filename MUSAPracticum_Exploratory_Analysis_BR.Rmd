@@ -634,6 +634,177 @@ ggplot() +
 
 ```
 
+### What is the relationship to commercial corridors?
+```{r}
+###Corridors
+#Load Philadelphia commercial corridors dataset and transform
+corridors <- st_read("./Commercial_Corridors.geojson") 
+
+corridors_filter <- corridors %>%
+  select(OBJECTID, NAME, GLA, P_DIST, ST_EXT, PT_ADD, VAC_RATE) %>%
+  mutate(VAC_RATE = str_remove_all(VAC_RATE, pattern = "%")) %>%
+  mutate(VAC_RATE = as.numeric(VAC_RATE)) %>%
+  st_as_sf() %>%
+  st_transform('ESRI:102271') 
+  
+# Plot commercial corridors with colors as vacancy rate
+ggplot() +
+  geom_sf(data = phillyBoundary, fill = "black") +
+  geom_sf(data = corridors_filter, aes(fill = VAC_RATE), color = "transparent") +
+  scale_fill_viridis_c(option = "plasma") +
+  labs(title = "Philadelphia Commercial Corridors") + 
+  mapTheme()
+
+###Restaurants
+#Merge restaurants with commercial corridors 
+corridors_restaurants <- 
+  dplyr::select(dat_restaurants_grid) %>% 
+  mutate(countRestaurant = 1) %>% 
+  aggregate(., corridors_filter, sum) %>%
+  mutate(countRestaurant = replace_na(countRestaurant, 0),
+         uniqueID = rownames(.),
+         area = st_area(geometry) * .00000038610,
+         count_per_mile = as.numeric(countRestaurant / area),
+         cvID = sample(round(nrow(corridors_filter) / 24), size=nrow(corridors_filter), replace = TRUE))
+
+#Plot map of number of restaurants per square mile
+ggplot() +
+  geom_sf(data = phillyBoundary, fill = "black") +
+  geom_sf(data = corridors_restaurants, aes(fill = count_per_mile), color = "transparent") +
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Count of Restaurants per Square Mile in Each Commercial Corridor") +
+  mapTheme()
+
+#Create animated map of number of restaurant trips by corridor per hour
+dat_restaurants_cord <- dat_restaurants %>%
+  st_as_sf() %>%
+  st_transform('ESRI:102271') 
+
+dat_corridors_restaurants <-
+  st_join(corridors_filter, dat_restaurants_cord, ) %>% 
+  group_by(NAME, GLA, Hour) %>%
+  summarize(Avg_Popularity = mean(Count),
+            Total_Visits = sum(Count)) %>%
+  st_as_sf() 
+
+dat_corridors_restaurants <- dat_corridors_restaurants %>%
+  mutate(
+    GLA = as.numeric(gsub(",", "", GLA)),
+    Visits_Per_Area = Total_Visits / GLA * 5)
+
+ 
+#Plot of restaurant popularity between 7 and 8pm
+dat_corridors_restaurants %>%
+  subset(Hour == 19) %>% #selecting for nighttime hours
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
+  geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Total Restaurant Visits by Commercial Corridor") 
+
+#Animation of restaurant popularity by hour
+restaurant.corr.animation.data <-
+    dat_corridors_restaurants %>%
+    st_sf() %>%
+    mutate(Pop_String = case_when(Visits_Per_Area < .4 ~ "5",
+                              Visits_Per_Area >= .4 & Visits_Per_Area <.8 ~ "4",
+                              Visits_Per_Area >= .8 & Visits_Per_Area <1.2 ~ "3",
+                              Visits_Per_Area >= 1.2 & Visits_Per_Area <1.6 ~ "2",
+                              Visits_Per_Area >= 2 ~ "1")) %>%
+    mutate(Pop_String  = fct_relevel(Pop_String, "5","4","3","2","1"))
+
+restaurant_corr_animation <-
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +   
+  geom_sf(data = restaurant.corr.animation.data, aes(fill = Visits_Per_Area), color = "transparent") +
+     scale_fill_viridis(trans = "sqrt") +
+    labs(title = "Restaurant Popularity by Hour",
+         subtitle = "One Hour Intervals: {current_frame}") +
+  theme(panel.background = element_rect(fill = "black"),
+         panel.grid.major = element_line(color = "transparent"),
+          panel.grid.minor = element_line(colour = "transparent")) +
+    transition_manual(Hour)
+
+animate(restaurant_corr_animation, duration=20, renderer = gifski_renderer())
+
+------------------------------
+
+###Bars
+corridors_bars <- 
+  dplyr::select(dat_bars_grid) %>% 
+  mutate(countBar = 1) %>% 
+  aggregate(., corridors_filter, sum) %>%
+  mutate(countBar = replace_na(countBar, 0),
+         uniqueID = rownames(.),
+         area = st_area(geometry) * .00000038610,
+         count_per_mile = as.numeric(countBar / area),
+         cvID = sample(round(nrow(corridors_filter) / 24), size=nrow(corridors_filter), replace = TRUE))
+
+#Plot map of number of bars per square mile
+ggplot() +
+  geom_sf(data = phillyBoundary, fill = "black") +
+  geom_sf(data = corridors_bars, aes(fill = count_per_mile), color = "transparent") +
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Count of Bars per Square Mile in Each Commercial Corridor") +
+  mapTheme()
+
+--------------
+
+#Create animated map of number of bar trips by corridor per hour
+dat_bars_cord <- dat_bars %>%
+  st_as_sf() %>%
+  st_transform('ESRI:102271') 
+
+dat_corridors_bars <-
+  st_join(corridors_filter, dat_bars_cord, ) %>% 
+  group_by(NAME, GLA, Hour) %>%
+  summarize(Avg_Popularity = mean(Count),
+            Total_Visits = sum(Count)) %>%
+  st_as_sf() 
+
+dat_corridors_bars <- dat_corridors_bars %>%
+  mutate(
+    GLA = as.numeric(gsub(",", "", GLA)),
+    Visits_Per_Area = Total_Visits / GLA * 5)
+
+ 
+#Plot of bar popularity between 7 and 8pm
+dat_corridors_bars %>%
+  subset(Hour == 19) %>% #selecting for nighttime hours
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
+  geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Total Bar Visits by Commercial Corridor") 
+
+#Animation of bar popularity by hour
+bar.corr.animation.data <-
+    dat_corridors_bars %>%
+    st_sf() %>%
+    mutate(Pop_String = case_when(Visits_Per_Area < .4 ~ "5",
+                              Visits_Per_Area >= .4 & Visits_Per_Area <.8 ~ "4",
+                              Visits_Per_Area >= .8 & Visits_Per_Area <1.2 ~ "3",
+                              Visits_Per_Area >= 1.2 & Visits_Per_Area <1.6 ~ "2",
+                              Visits_Per_Area >= 2 ~ "1")) %>%
+    mutate(Pop_String  = fct_relevel(Pop_String, "5","4","3","2","1"))
+
+bar_corr_animation <-
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +   
+  geom_sf(data = bar.corr.animation.data, aes(fill = Visits_Per_Area), color = "transparent") +
+     scale_fill_viridis(trans = "sqrt") +
+    labs(title = "Restaurant Popularity by Hour",
+         subtitle = "One Hour Intervals: {current_frame}") +
+  theme(panel.background = element_rect(fill = "black"),
+         panel.grid.major = element_line(color = "transparent"),
+          panel.grid.minor = element_line(colour = "transparent")) +
+    transition_manual(Hour)
+
+animate(bar_corr_animation, duration=20, renderer = gifski_renderer())
+
+```
+
+
 ### How long do people spend in establishments?
 
 [TBD]
