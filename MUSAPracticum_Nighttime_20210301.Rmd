@@ -14,8 +14,8 @@ knitr::opts_chunk$set(
 	echo = TRUE,
 	message = FALSE,
 	warning = FALSE,
-	width=600,
-	out.height = "\\textheight",  out.width = "\\textwidth"
+	width=6000,
+	out.width = "100%"
 )
 ```
 
@@ -563,16 +563,16 @@ PHL_boundary_unproj <-as.data.frame(PHL_boundary_unproj) # save as dataframe
 ```
 
 Figure X.X maps the trips to restaurants by district. The color, transparency and width of the lines correspond to the number of trips to each district. To improve the readability of the maps, we have only shown data from June 2018.
-```{r restaurants by district}
+```{r restaurants by district, width = 1200}
 #Restaurants by corridor District
 flows %>% 
   filter(top_category == "Restaurants and Other Eating Places",
-         date_range_start == "2018-06-01T04:00:00Z") %>%
-  drop_na(corridor_dist) %>%
-  ggplot() + 
+         date_range_start == "2018-06-01T04:00:00Z") %>% #filter results
+  drop_na(corridor_dist) %>% #remomve datapoints outside of corridors
+  ggplot() + #plot
   geom_polygon(data = PHL_boundary_unproj, aes(x=X, y=Y)) +
   geom_segment(aes(x = lat.origin, y = long.origin, xend = lat.dest, yend = long.dest, 
-                   alpha=count, color=count)) +
+                   alpha=count, size=count, color=count)) +
   scale_colour_distiller(palette="Blues", name="Count", guide = "colorbar") +
   coord_equal() +
   facet_wrap(~corridor_dist, ncol = 6) +
@@ -583,7 +583,7 @@ flows %>%
 ```
 
 Figure X.X maps trips to bars by districts. As with bars, this is only data from June 2018.
-```{r bars by district}
+```{r bars by district, width = 1200}
 #Bars by Corridor Districts
 flows %>% 
   filter(top_category == "Drinking Places (Alcoholic Beverages)",
@@ -595,14 +595,14 @@ flows %>%
                    color=count, size=count, alpha=count)) +
   scale_colour_distiller(palette="Reds", name="Count", guide = "colorbar") +
   coord_equal() +
-  facet_wrap(~corridor, ncol = 6) +
+  facet_wrap(~corridor_dist, ncol = 6) +
   mapTheme() + 
   labs(title = "Bar Trips by District, June 2018",
        sbutitle = "Figure X.X")
 ```
 
 Finally, Figure X.X maps trips to arts venues by districts from June 2018. Since there are far fewer arts locations in the city, this graphic only shows 4 districts where people travel to such establishments.
-```{r}
+```{r art venues by district, width = 1200}
 #Art Venues by corridor District
 flows %>% 
   filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
@@ -622,185 +622,7 @@ flows %>%
 
 ```
 
-These maps are works in progress and we would love feedback on how to improve the readability.
-
-### Philadelphia visitor origins
-
-Next we explore where visitors come from. Separated by nightlife establishment type, Figures X.Xa and X.Xb shows the average distance travelled from each census block group. The distance is calculated by measuring the euclidean distance between the centroid of each origin block group and the destination. Then we calculate the weighted mean of the distance travelled to account for destinations that people in a given block group visit more frequently.
-
-For business types that are well-dispersed throughout the city, such as bars and restaurants, it appears that visitors typically travel shorter distances. For business types with fewer destinations, such as casinos, or that are clusters in specific areas of the city, such as hotels, it is common for visitors to make longer trips to these destinations.
-
-```{r origin data wrangling}
-#Preparing dataset to split out by individual cbgs
-dat_cbg <- 
-  dat2 %>%
-  select(safegraph_place_id, 
-         date_range_start, 
-         top_category, 
-         sub_category, 
-         poi_cbg, 
-         visitor_home_cbgs, 
-         geometry) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
-  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
-  unnest(visitor_home_cbgs) %>%
-  separate(.,
-           visitor_home_cbgs,
-           c("Visitor_CBG", "Visitors"),
-           sep = ":") %>%
-  mutate(Visitor_CBG = as.numeric(Visitor_CBG),
-         poi_cbg = as.numeric(poi_cbg),
-         Visitors = as.numeric(Visitors))
-
-cbg_origin <- #takes a really long time!
-  dat_cbg %>%
-  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
-           top_category == "Restaurants and Other Eating Places" |
-           top_category == "Traveler Accommodation" |
-           top_category == "Gambling Industries" |
-           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
-           top_category == "Performing Arts Companies") %>% #filter for nightlife establishments
-  st_drop_geometry() %>% #drop geometry to join with cbg file
-  dplyr::rename(., GEOID10 = Visitor_CBG) %>% #renaming to match cbg file
-  left_join(phl_cbg, by = "GEOID10") %>% # join to cbg file
-  select(safegraph_place_id, 
-         poi_cbg, 
-         GEOID10, 
-         Visitors, 
-         geometry) %>% #clean up dataset
-  rename(., cbg_origin = GEOID10, #clean up column names
-         cbg_dest = poi_cbg,
-         geometry_origin = geometry) %>%
-  left_join(phila, by = "safegraph_place_id") %>% #join back to the SafeGraph locations
-  select(safegraph_place_id, 
-         top_category, 
-         sub_category, 
-         cbg_dest, 
-         cbg_origin, 
-         Visitors, 
-         geometry_origin, 
-         geometry) %>%
-  rename(., geometry_dest = geometry) %>%
-  drop_na(geometry_origin) %>% #removing geometries that didn't match (ie outside philily)
-  mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest)) #calculate distance
-```
-
-```{r origin viz, message=FALSE, warning=FALSE, include=FALSE}
-#Continuous
-cbg_origin %>%
-  group_by(cbg_origin, top_category) %>%
-  summarize(avg_distance = mean(distance)) %>%  
-  rename(., GEOID10 = cbg_origin) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  mutate(avg_distance = as.numeric(avg_distance)) %>%
-  st_as_sf() %>%
-  ggplot() +
-  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
-  geom_sf(aes(fill = avg_distance), color = "transparent") + 
-  scale_fill_viridis() + 
-  mapTheme() +
-  labs(title = "How far do people travel to nightlife?", 
-       subtitle = "Figure X.Xa") +
-  facet_wrap(~top_category)
-
-#Quintile
-cbg_origin %>%
-  drop_na(distance) %>%  
-  group_by(cbg_origin, top_category) %>%
-  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%  
-  rename(., GEOID10 = cbg_origin) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  mutate(avg_distance = as.numeric(avg_distance)) %>%
-  st_as_sf() %>%
-  ggplot() +
-  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
-  geom_sf(aes(fill = q5(avg_distance)), color = "transparent") + 
-  scale_fill_manual(values = palette5,
-                    aesthetics = c("colour", "fill"),
-                    name = "Average Distance \n(Quintile)") +
-  mapTheme() +
-  labs(title = "How far do people travel to nightlife (quintile)?",
-       subtitle = "Figure X.Xb") +
-  facet_wrap(~top_category)
-```
-
-### Philadelphia destinations
-
-Next, we study how far do Philadelphia visitors travel to nightlife establishemnts. These maps show the average distance travelled to each destination. Similar to the above, distance travelled is calculated by meauring the euclidena distance from each destination to the centroid of each visitor's block group. The metric shown here represented the weighted average of trips and distances.
-
-In general, we see that visitors travel further to Center City destinations. Importantly, these graphics exclude all trips that originate outside of Philadelphia.
-
-```{r destination data wrangling}
-cbg_dest <-
-  dat_cbg %>%
-  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
-           top_category == "Restaurants and Other Eating Places" |
-           top_category == "Traveler Accommodation" |
-           top_category == "Gambling Industries" |
-           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
-           top_category == "Performing Arts Companies") %>%
-  st_drop_geometry() %>%
-  rename(., GEOID10 = Visitor_CBG) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  select(safegraph_place_id, 
-         GEOID10, 
-         poi_cbg, 
-         Visitors, 
-         geometry) %>%
-  rename(., cbg_origin = GEOID10,
-         geometry_origin = geometry,
-         cbg_dest = poi_cbg) %>%
-  left_join(phila, by = "safegraph_place_id") %>%
-  select(safegraph_place_id, 
-         top_category, 
-         sub_category, 
-         cbg_origin, 
-         cbg_dest, 
-         Visitors, 
-         geometry_origin, 
-         geometry) %>%
-  rename(., geometry_dest = geometry) %>%
-  drop_na(geometry_origin) %>% #dropping origins outside of philadelphia
-  mutate(distance = mapply(st_distance, st_centroid(geometry_origin), st_centroid(geometry_dest)))
-```
-
-```{r destination viz}
-#Continuous
-cbg_dest %>%
-  group_by(safegraph_place_id, top_category) %>%
-  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
-  dplyr::select(safegraph_place_id, avg_distance) %>%
-  left_join(phila, by = "safegraph_place_id") %>%
-  st_as_sf() %>%
-  ggplot() +
-  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
-  geom_sf(aes(color = avg_distance), size = 1) + 
-  scale_fill_viridis(aesthetics = "color") +
-  mapTheme() +
-  labs(title = "Which nightlife destinations do visitors travel the furthest?",
-       subtitle = "Figure X.Xa") +
-  facet_wrap(~top_category)
-
-#Quintile
-cbg_dest %>%
-  group_by(safegraph_place_id, top_category) %>%
-  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
-  dplyr::select(safegraph_place_id, avg_distance) %>%
-  left_join(phila, by = "safegraph_place_id") %>%
-  st_as_sf() %>%
-  ggplot() +
-  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
-  geom_sf(aes(color = q5(avg_distance)), size = 1) + 
-  scale_fill_manual(values = palette5,
-                    aesthetics = c("colour", "fill"),
-                    name = "Average Distance \n(Quintile)") +
-  mapTheme() +
-  labs(title = "Which nightlife destinations do visitors travel the farthest?",
-       subtitle = "Figure X.Xb") +
-  facet_wrap(~top_category)
-```
+These maps have replaced our origin/destination maps that we presented last week. They are works in progress and we would love feedback on how to improve the readability.
 
 ## Nightlife corridors in Philadelphia
 
@@ -864,7 +686,7 @@ ggplot() +
   mapTheme()
 ```
 
-Restaurant animations
+Below is an animation showing restaurant popularity by corridor.
 ```{r}
 #Create animated map of number of restaurant trips by corridor per hour
 dat_restaurants_cord <- dat_restaurants %>%
@@ -886,13 +708,13 @@ dat_corridors_restaurants <- dat_corridors_restaurants %>%
     Visits_Per_Area = Total_Visits / GLA * 5)
 
 #Plot of restaurant popularity between 7 and 8pm
-dat_corridors_restaurants %>%
-  subset(Hour == 19) %>% #selecting for nighttime hours
-  ggplot() + 
-  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
-  geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
-  scale_fill_viridis(trans = "sqrt") +
-  labs(title = "Total Restaurant Visits by Commercial Corridor") 
+# dat_corridors_restaurants %>%
+#   subset(Hour == 19) %>% #selecting for nighttime hours
+#   ggplot() + 
+#   geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
+#   geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+#   scale_fill_viridis(trans = "sqrt") +
+#   labs(title = "Total Restaurant Visits by Commercial Corridor") 
 
 
 #Animation of restaurant popularity by hour
@@ -952,6 +774,7 @@ ggplot() +
   mapTheme()
 ```
 
+Below is an animation showing bar popularity aggregated by commercial corridor.
 ```{r bars animation}
 #Create animated map of number of bar trips by corridor per hour
 dat_bars_cord <- dat_bars %>%
@@ -972,13 +795,13 @@ dat_corridors_bars <- dat_corridors_bars %>%
     Visits_Per_Area = Total_Visits / GLA * 5)
 
 #Plot of bar popularity between 7 and 8pm
-dat_corridors_bars %>%
-  subset(Hour == 19) %>% #selecting for nighttime hours
-  ggplot() + 
-  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
-  geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
-  scale_fill_viridis(trans = "sqrt") +
-  labs(title = "Total Bar Visits by Commercial Corridor") 
+# dat_corridors_bars %>%
+#   subset(Hour == 19) %>% #selecting for nighttime hours
+#   ggplot() + 
+#   geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
+#   geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+#   scale_fill_viridis(trans = "sqrt") +
+#   labs(title = "Total Bar Visits by Commercial Corridor") 
 
 #Animation of bar popularity by hour
 bar.corr.animation.data <-
@@ -1005,7 +828,8 @@ bar_corr_animation <-
 
 animate(bar_corr_animation, duration=20, renderer = gifski_renderer())
 ```
-## Dwell times
+
+## Visit duration to bars and restaurants in Philadelphia
 
 The following Figures look at the median dwell time by bars and restaurants per commercial corridor.
 ```{r}

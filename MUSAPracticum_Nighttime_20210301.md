@@ -15,11 +15,10 @@ Maddy Kornhauser, Brian Rawn, Sabrina Lee
       - [Nightlife hours](#nightlife-hours)
       - [Trip Flows](#trip-flows)
           - [Origins & destinations](#origins-destinations)
-          - [Philadelphia visitor
-            origins](#philadelphia-visitor-origins)
-          - [Philadelphia destinations](#philadelphia-destinations)
       - [Nightlife corridors in
         Philadelphia](#nightlife-corridors-in-philadelphia)
+      - [Visit duration to bars and restaurants in
+        Philadelphia](#visit-duration-to-bars-and-restaurants-in-philadelphia)
       - [Neighborhood and corridor
         comparisons](#neighborhood-and-corridor-comparisons)
   - [4. Next Steps](#next-steps)
@@ -191,7 +190,7 @@ dat2 %>%
   mapTheme()
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/establishment locations-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/establishment locations-1.png" width="100%" />
 
 To look at the spatial patterns another way, we review the distribution
 of businesses with a fishnet grid. The fishnet allows us to visualize
@@ -364,7 +363,7 @@ for(i in vars){
 do.call(grid.arrange, c(mapList, ncol=3, top="Count of Nightlife Businesses per Fishnet", bottom = "Figure X.X"))
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-1-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-1-1.png" width="100%" />
 
 ## Nightlife hours
 
@@ -399,7 +398,7 @@ dat_hour %>%
   plotTheme()
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/traffic by nightlife establishment-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/traffic by nightlife establishment-1.png" width="100%" />
 
 The following animation shows restaurant visitor counts by census block
 group over the course of the day. We observe the highest amount of
@@ -449,7 +448,7 @@ restaurant_animation <-
 animate(restaurant_animation, duration=20, renderer = gifski_renderer())
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-2-1.gif" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-2-1.gif" width="100%" />
 
 The following animation shows the same metric for bars. We observe
 traffic increasing throughout the day starting in the afternoon.
@@ -497,7 +496,7 @@ bar_animation <-
 animate(bar_animation, duration=20, renderer = gifski_renderer())
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/bar animation-1.gif" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/bar animation-1.gif" width="100%" />
 
 ## Trip Flows
 
@@ -608,12 +607,12 @@ shown data from June 2018.
 #Restaurants by corridor District
 flows %>% 
   filter(top_category == "Restaurants and Other Eating Places",
-         date_range_start == "2018-06-01T04:00:00Z") %>%
-  drop_na(corridor_dist) %>%
-  ggplot() + 
+         date_range_start == "2018-06-01T04:00:00Z") %>% #filter results
+  drop_na(corridor_dist) %>% #remomve datapoints outside of corridors
+  ggplot() + #plot
   geom_polygon(data = PHL_boundary_unproj, aes(x=X, y=Y)) +
   geom_segment(aes(x = lat.origin, y = long.origin, xend = lat.dest, yend = long.dest, 
-                   alpha=count, color=count)) +
+                   alpha=count, size=count, color=count)) +
   scale_colour_distiller(palette="Blues", name="Count", guide = "colorbar") +
   coord_equal() +
   facet_wrap(~corridor_dist, ncol = 6) +
@@ -622,7 +621,7 @@ flows %>%
        subtitle = "Figure X.X")
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/restaurants by district-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/restaurants by district-1.png" width="100%" />
 
 Figure X.X maps trips to bars by districts. As with bars, this is only
 data from June 2018.
@@ -639,13 +638,13 @@ flows %>%
                    color=count, size=count, alpha=count)) +
   scale_colour_distiller(palette="Reds", name="Count", guide = "colorbar") +
   coord_equal() +
-  facet_wrap(~corridor, ncol = 6) +
+  facet_wrap(~corridor_dist, ncol = 6) +
   mapTheme() + 
   labs(title = "Bar Trips by District, June 2018",
        sbutitle = "Figure X.X")
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/bars by district-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/bars by district-1.png" width="100%" />
 
 Finally, Figure X.X maps trips to arts venues by districts from June
 2018. Since there are far fewer arts locations in the city, this graphic
@@ -670,172 +669,11 @@ flows %>%
        subtitle = "Figure X.X")
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-3-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/art venues by district-1.png" width="100%" />
 
-These maps are works in progress and we would love feedback on how to
-improve the readability.
-
-### Philadelphia visitor origins
-
-Next we explore where visitors come from. Separated by nightlife
-establishment type, Figures X.Xa and X.Xb shows the average distance
-travelled from each census block group. The distance is calculated by
-measuring the euclidean distance between the centroid of each origin
-block group and the destination. Then we calculate the weighted mean of
-the distance travelled to account for destinations that people in a
-given block group visit more frequently.
-
-For business types that are well-dispersed throughout the city, such as
-bars and restaurants, it appears that visitors typically travel shorter
-distances. For business types with fewer destinations, such as casinos,
-or that are clusters in specific areas of the city, such as hotels, it
-is common for visitors to make longer trips to these destinations.
-
-``` r
-#Preparing dataset to split out by individual cbgs
-dat_cbg <- 
-  dat2 %>%
-  select(safegraph_place_id, 
-         date_range_start, 
-         top_category, 
-         sub_category, 
-         poi_cbg, 
-         visitor_home_cbgs, 
-         geometry) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
-  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
-  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
-  unnest(visitor_home_cbgs) %>%
-  separate(.,
-           visitor_home_cbgs,
-           c("Visitor_CBG", "Visitors"),
-           sep = ":") %>%
-  mutate(Visitor_CBG = as.numeric(Visitor_CBG),
-         poi_cbg = as.numeric(poi_cbg),
-         Visitors = as.numeric(Visitors))
-
-cbg_origin <- #takes a really long time!
-  dat_cbg %>%
-  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
-           top_category == "Restaurants and Other Eating Places" |
-           top_category == "Traveler Accommodation" |
-           top_category == "Gambling Industries" |
-           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
-           top_category == "Performing Arts Companies") %>% #filter for nightlife establishments
-  st_drop_geometry() %>% #drop geometry to join with cbg file
-  dplyr::rename(., GEOID10 = Visitor_CBG) %>% #renaming to match cbg file
-  left_join(phl_cbg, by = "GEOID10") %>% # join to cbg file
-  select(safegraph_place_id, 
-         poi_cbg, 
-         GEOID10, 
-         Visitors, 
-         geometry) %>% #clean up dataset
-  rename(., cbg_origin = GEOID10, #clean up column names
-         cbg_dest = poi_cbg,
-         geometry_origin = geometry) %>%
-  left_join(phila, by = "safegraph_place_id") %>% #join back to the SafeGraph locations
-  select(safegraph_place_id, 
-         top_category, 
-         sub_category, 
-         cbg_dest, 
-         cbg_origin, 
-         Visitors, 
-         geometry_origin, 
-         geometry) %>%
-  rename(., geometry_dest = geometry) %>%
-  drop_na(geometry_origin) %>% #removing geometries that didn't match (ie outside philily)
-  mutate(distance = mapply(st_distance, st_centroid(geometry_origin), geometry_dest)) #calculate distance
-```
-
-### Philadelphia destinations
-
-Next, we study how far do Philadelphia visitors travel to nightlife
-establishemnts. These maps show the average distance travelled to each
-destination. Similar to the above, distance travelled is calculated by
-meauring the euclidena distance from each destination to the centroid of
-each visitor’s block group. The metric shown here represented the
-weighted average of trips and distances.
-
-In general, we see that visitors travel further to Center City
-destinations. Importantly, these graphics exclude all trips that
-originate outside of Philadelphia.
-
-``` r
-cbg_dest <-
-  dat_cbg %>%
-  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
-           top_category == "Restaurants and Other Eating Places" |
-           top_category == "Traveler Accommodation" |
-           top_category == "Gambling Industries" |
-           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
-           top_category == "Performing Arts Companies") %>%
-  st_drop_geometry() %>%
-  rename(., GEOID10 = Visitor_CBG) %>%
-  left_join(phl_cbg, by = "GEOID10") %>%
-  select(safegraph_place_id, 
-         GEOID10, 
-         poi_cbg, 
-         Visitors, 
-         geometry) %>%
-  rename(., cbg_origin = GEOID10,
-         geometry_origin = geometry,
-         cbg_dest = poi_cbg) %>%
-  left_join(phila, by = "safegraph_place_id") %>%
-  select(safegraph_place_id, 
-         top_category, 
-         sub_category, 
-         cbg_origin, 
-         cbg_dest, 
-         Visitors, 
-         geometry_origin, 
-         geometry) %>%
-  rename(., geometry_dest = geometry) %>%
-  drop_na(geometry_origin) %>% #dropping origins outside of philadelphia
-  mutate(distance = mapply(st_distance, st_centroid(geometry_origin), st_centroid(geometry_dest)))
-```
-
-``` r
-#Continuous
-cbg_dest %>%
-  group_by(safegraph_place_id, top_category) %>%
-  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
-  dplyr::select(safegraph_place_id, avg_distance) %>%
-  left_join(phila, by = "safegraph_place_id") %>%
-  st_as_sf() %>%
-  ggplot() +
-  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
-  geom_sf(aes(color = avg_distance), size = 1) + 
-  scale_fill_viridis(aesthetics = "color") +
-  mapTheme() +
-  labs(title = "Which nightlife destinations do visitors travel the furthest?",
-       subtitle = "Figure X.Xa") +
-  facet_wrap(~top_category)
-```
-
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/destination viz-1.png" width="\textwidth" height="\textheight" />
-
-``` r
-#Quintile
-cbg_dest %>%
-  group_by(safegraph_place_id, top_category) %>%
-  summarize(avg_distance = weighted.mean(distance, Visitors)) %>%
-  dplyr::select(safegraph_place_id, avg_distance) %>%
-  left_join(phila, by = "safegraph_place_id") %>%
-  st_as_sf() %>%
-  ggplot() +
-  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
-  geom_sf(aes(color = q5(avg_distance)), size = 1) + 
-  scale_fill_manual(values = palette5,
-                    aesthetics = c("colour", "fill"),
-                    name = "Average Distance \n(Quintile)") +
-  mapTheme() +
-  labs(title = "Which nightlife destinations do visitors travel the farthest?",
-       subtitle = "Figure X.Xb") +
-  facet_wrap(~top_category)
-```
-
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/destination viz-2.png" width="\textwidth" height="\textheight" />
+These maps have replaced our origin/destination maps that we presented
+last week. They are works in progress and we would love feedback on how
+to improve the readability.
 
 ## Nightlife corridors in Philadelphia
 
@@ -879,7 +717,7 @@ ggplot() +
   mapTheme()
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-4-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-3-1.png" width="100%" />
 
 Figure X.X below breaks down the count of restaunts in a given corridor
 per square miile. We find that central corridors and districts tend to
@@ -917,9 +755,9 @@ ggplot() +
   mapTheme()
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-5-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-4-1.png" width="100%" />
 
-Restaurant animations
+Below is an animation showing restaurant popularity by corridor.
 
 ``` r
 #Create animated map of number of restaurant trips by corridor per hour
@@ -942,18 +780,15 @@ dat_corridors_restaurants <- dat_corridors_restaurants %>%
     Visits_Per_Area = Total_Visits / GLA * 5)
 
 #Plot of restaurant popularity between 7 and 8pm
-dat_corridors_restaurants %>%
-  subset(Hour == 19) %>% #selecting for nighttime hours
-  ggplot() + 
-  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
-  geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
-  scale_fill_viridis(trans = "sqrt") +
-  labs(title = "Total Restaurant Visits by Commercial Corridor") 
-```
+# dat_corridors_restaurants %>%
+#   subset(Hour == 19) %>% #selecting for nighttime hours
+#   ggplot() + 
+#   geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
+#   geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+#   scale_fill_viridis(trans = "sqrt") +
+#   labs(title = "Total Restaurant Visits by Commercial Corridor") 
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-6-1.png" width="\textwidth" height="\textheight" />
 
-``` r
 #Animation of restaurant popularity by hour
 restaurant.corr.animation.data <-
     dat_corridors_restaurants %>%
@@ -980,7 +815,7 @@ restaurant_corr_animation <-
 animate(restaurant_corr_animation, duration=20, renderer = gifski_renderer())
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-6-1.gif" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-5-1.gif" width="100%" />
 
 Figure X.X shows the number of bars in each commercial corridor per
 square mile. Again, we see the corridors around Center City generally
@@ -1016,7 +851,10 @@ ggplot() +
   mapTheme()
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/Bars by corridor-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/Bars by corridor-1.png" width="100%" />
+
+Below is an animation showing bar popularity aggregated by commercial
+corridor.
 
 ``` r
 #Create animated map of number of bar trips by corridor per hour
@@ -1038,18 +876,14 @@ dat_corridors_bars <- dat_corridors_bars %>%
     Visits_Per_Area = Total_Visits / GLA * 5)
 
 #Plot of bar popularity between 7 and 8pm
-dat_corridors_bars %>%
-  subset(Hour == 19) %>% #selecting for nighttime hours
-  ggplot() + 
-  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
-  geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
-  scale_fill_viridis(trans = "sqrt") +
-  labs(title = "Total Bar Visits by Commercial Corridor") 
-```
+# dat_corridors_bars %>%
+#   subset(Hour == 19) %>% #selecting for nighttime hours
+#   ggplot() + 
+#   geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
+#   geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+#   scale_fill_viridis(trans = "sqrt") +
+#   labs(title = "Total Bar Visits by Commercial Corridor") 
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/bars animation-1.png" width="\textwidth" height="\textheight" />
-
-``` r
 #Animation of bar popularity by hour
 bar.corr.animation.data <-
     dat_corridors_bars %>%
@@ -1076,8 +910,9 @@ bar_corr_animation <-
 animate(bar_corr_animation, duration=20, renderer = gifski_renderer())
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/bars animation-1.gif" width="\textwidth" height="\textheight" />
-\#\# Dwell times
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/bars animation-1.gif" width="100%" />
+
+## Visit duration to bars and restaurants in Philadelphia
 
 The following Figures look at the median dwell time by bars and
 restaurants per commercial corridor.
@@ -1110,7 +945,7 @@ dat_corridors_restaurants %>%
   mapTheme()
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-7-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-6-1.png" width="100%" />
 
 ``` r
 #Plot of bar median dwell time 
@@ -1125,7 +960,7 @@ dat_corridors_bars %>%
   mapTheme()
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-7-2.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-6-2.png" width="100%" />
 
 ## Neighborhood and corridor comparisons
 
@@ -1245,7 +1080,7 @@ dat_EGC_cbg %>%
   facet_wrap(~top_category)
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-8-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-7-1.png" width="100%" />
 
 ``` r
 dat_EGC_cbg %>%
@@ -1268,7 +1103,7 @@ dat_EGC_cbg %>%
   facet_wrap(~top_category)
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-8-2.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/unnamed-chunk-7-2.png" width="100%" />
 
 Figures 3.12a and 3.12b show the volume of visitors to West Girard
 corridor. While the corridor appears to draw visitors from fewer census
@@ -1301,7 +1136,7 @@ dat_WGC_cbg %>%
   facet_wrap(~top_category)
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/West Girard viz-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/West Girard viz-1.png" width="100%" />
 
 ``` r
 dat_WGC_cbg %>%
@@ -1324,7 +1159,7 @@ dat_WGC_cbg %>%
   facet_wrap(~top_category)
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/West Girard viz-2.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/West Girard viz-2.png" width="100%" />
 
 We can further explore the individual corridor analysis by tying the
 trip origins to census data. This allows us to construct a customer
@@ -1356,7 +1191,7 @@ phl_blockgroups <-
   dplyr::select(-Whites) 
 ```
 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |                                                                      |   1%  |                                                                              |=                                                                     |   1%  |                                                                              |==                                                                    |   2%  |                                                                              |==                                                                    |   3%  |                                                                              |==                                                                    |   4%  |                                                                              |===                                                                   |   4%  |                                                                              |===                                                                   |   5%  |                                                                              |====                                                                  |   6%  |                                                                              |=====                                                                 |   7%  |                                                                              |======                                                                |   8%  |                                                                              |======                                                                |   9%  |                                                                              |=======                                                               |  10%  |                                                                              |========                                                              |  11%  |                                                                              |=========                                                             |  12%  |                                                                              |=========                                                             |  13%  |                                                                              |==========                                                            |  14%  |                                                                              |==========                                                            |  15%  |                                                                              |===========                                                           |  15%  |                                                                              |============                                                          |  17%  |                                                                              |============                                                          |  18%  |                                                                              |=============                                                         |  19%  |                                                                              |==============                                                        |  20%  |                                                                              |===============                                                       |  21%  |                                                                              |===============                                                       |  22%  |                                                                              |================                                                      |  23%  |                                                                              |=================                                                     |  24%  |                                                                              |==================                                                    |  26%  |                                                                              |===================                                                   |  27%  |                                                                              |====================                                                  |  28%  |                                                                              |====================                                                  |  29%  |                                                                              |=====================                                                 |  30%  |                                                                              |======================                                                |  31%  |                                                                              |=======================                                               |  32%  |                                                                              |=======================                                               |  33%  |                                                                              |========================                                              |  34%  |                                                                              |========================                                              |  35%  |                                                                              |=========================                                             |  35%  |                                                                              |==========================                                            |  37%  |                                                                              |==========================                                            |  38%  |                                                                              |===========================                                           |  39%  |                                                                              |============================                                          |  40%  |                                                                              |=============================                                         |  41%  |                                                                              |=============================                                         |  42%  |                                                                              |==============================                                        |  43%  |                                                                              |===============================                                       |  44%  |                                                                              |================================                                      |  46%  |                                                                              |=================================                                     |  48%  |                                                                              |==================================                                    |  48%  |                                                                              |==================================                                    |  49%  |                                                                              |===================================                                   |  50%  |                                                                              |====================================                                  |  51%  |                                                                              |=====================================                                 |  52%  |                                                                              |=====================================                                 |  53%  |                                                                              |======================================                                |  54%  |                                                                              |=======================================                               |  55%  |                                                                              |========================================                              |  57%  |                                                                              |=========================================                             |  59%  |                                                                              |==========================================                            |  60%  |                                                                              |===========================================                           |  61%  |                                                                              |===========================================                           |  62%  |                                                                              |============================================                          |  63%  |                                                                              |=============================================                         |  64%  |                                                                              |==============================================                        |  65%  |                                                                              |==============================================                        |  66%  |                                                                              |===============================================                       |  68%  |                                                                              |================================================                      |  69%  |                                                                              |=================================================                     |  70%  |                                                                              |==================================================                    |  71%  |                                                                              |==================================================                    |  72%  |                                                                              |===================================================                   |  73%  |                                                                              |====================================================                  |  74%  |                                                                              |=====================================================                 |  75%  |                                                                              |======================================================                |  77%  |                                                                              |=======================================================               |  79%  |                                                                              |========================================================              |  80%  |                                                                              |=========================================================             |  81%  |                                                                              |=========================================================             |  82%  |                                                                              |==========================================================            |  83%  |                                                                              |===========================================================           |  84%  |                                                                              |============================================================          |  85%  |                                                                              |============================================================          |  86%  |                                                                              |=============================================================         |  87%  |                                                                              |=============================================================         |  88%  |                                                                              |==============================================================        |  88%  |                                                                              |===============================================================       |  90%  |                                                                              |===============================================================       |  91%  |                                                                              |================================================================      |  92%  |                                                                              |=================================================================     |  93%  |                                                                              |==================================================================    |  94%  |                                                                              |===================================================================   |  95%  |                                                                              |====================================================================  |  96%  |                                                                              |====================================================================  |  97%  |                                                                              |===================================================================== |  99%  |                                                                              |======================================================================| 100%
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |                                                                      |   1%  |                                                                              |=                                                                     |   1%  |                                                                              |=                                                                     |   2%  |                                                                              |==                                                                    |   4%  |                                                                              |===                                                                   |   4%  |                                                                              |====                                                                  |   5%  |                                                                              |====                                                                  |   6%  |                                                                              |=====                                                                 |   7%  |                                                                              |======                                                                |   8%  |                                                                              |======                                                                |   9%  |                                                                              |=======                                                               |   9%  |                                                                              |=======                                                               |  10%  |                                                                              |========                                                              |  11%  |                                                                              |========                                                              |  12%  |                                                                              |=========                                                             |  12%  |                                                                              |=========                                                             |  13%  |                                                                              |==========                                                            |  14%  |                                                                              |==========                                                            |  15%  |                                                                              |===========                                                           |  15%  |                                                                              |============                                                          |  17%  |                                                                              |============                                                          |  18%  |                                                                              |=============                                                         |  19%  |                                                                              |==============                                                        |  20%  |                                                                              |===============                                                       |  21%  |                                                                              |===============                                                       |  22%  |                                                                              |================                                                      |  23%  |                                                                              |=================                                                     |  24%  |                                                                              |==================                                                    |  26%  |                                                                              |===================                                                   |  26%  |                                                                              |===================                                                   |  28%  |                                                                              |====================                                                  |  29%  |                                                                              |=====================                                                 |  30%  |                                                                              |======================                                                |  31%  |                                                                              |=======================                                               |  32%  |                                                                              |=======================                                               |  33%  |                                                                              |========================                                              |  34%  |                                                                              |=========================                                             |  35%  |                                                                              |==========================                                            |  37%  |                                                                              |==========================                                            |  38%  |                                                                              |===========================                                           |  39%  |                                                                              |============================                                          |  40%  |                                                                              |=============================                                         |  41%  |                                                                              |=============================                                         |  42%  |                                                                              |==============================                                        |  43%  |                                                                              |===============================                                       |  44%  |                                                                              |================================                                      |  46%  |                                                                              |=================================                                     |  48%  |                                                                              |==================================                                    |  49%  |                                                                              |===================================                                   |  50%  |                                                                              |====================================                                  |  51%  |                                                                              |=====================================                                 |  52%  |                                                                              |=====================================                                 |  53%  |                                                                              |======================================                                |  54%  |                                                                              |=======================================                               |  55%  |                                                                              |========================================                              |  57%  |                                                                              |=========================================                             |  59%  |                                                                              |==========================================                            |  60%  |                                                                              |===========================================                           |  61%  |                                                                              |===========================================                           |  62%  |                                                                              |============================================                          |  63%  |                                                                              |=============================================                         |  64%  |                                                                              |==============================================                        |  65%  |                                                                              |==============================================                        |  66%  |                                                                              |===============================================                       |  68%  |                                                                              |================================================                      |  68%  |                                                                              |=================================================                     |  70%  |                                                                              |=================================================                     |  71%  |                                                                              |==================================================                    |  72%  |                                                                              |===================================================                   |  73%  |                                                                              |====================================================                  |  74%  |                                                                              |=====================================================                 |  75%  |                                                                              |======================================================                |  77%  |                                                                              |=======================================================               |  79%  |                                                                              |========================================================              |  80%  |                                                                              |=========================================================             |  81%  |                                                                              |=========================================================             |  82%  |                                                                              |==========================================================            |  83%  |                                                                              |===========================================================           |  84%  |                                                                              |============================================================          |  85%  |                                                                              |============================================================          |  86%  |                                                                              |=============================================================         |  87%  |                                                                              |=============================================================         |  88%  |                                                                              |==============================================================        |  88%  |                                                                              |===============================================================       |  90%  |                                                                              |===============================================================       |  91%  |                                                                              |================================================================      |  92%  |                                                                              |=================================================================     |  93%  |                                                                              |==================================================================    |  94%  |                                                                              |===================================================================   |  95%  |                                                                              |===================================================================   |  96%  |                                                                              |====================================================================  |  97%  |                                                                              |===================================================================== |  99%  |                                                                              |======================================================================|  99%  |                                                                              |======================================================================| 100%
 
 The below Figure X.X compares demographic indicators pulled from the
 census across the two customer bases. East Girard corridor’s customer
@@ -1387,7 +1222,7 @@ rbind(dat_EGC_cbg, dat_WGC_cbg) %>%
        subtitle = "Figure X.X")
 ```
 
-<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/corridor comparison-1.png" width="\textwidth" height="\textheight" />
+<img src="MUSAPracticum_Nighttime_20210301_files/figure-gfm/corridor comparison-1.png" width="100%" />
 
 # 4\. Next Steps
 
