@@ -278,7 +278,7 @@ Turning to traffic by hour of the day, the following chart shows foot average fo
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
 dat_hour <- 
   dat2 %>% 
-  select(safegraph_place_id, top_category, sub_category, popularity_by_hour, poi_cbg) %>%
+  select(safegraph_place_id, top_category, sub_category, popularity_by_hour, poi_cbg, median_dwell) %>%
   mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
   unnest(popularity_by_hour) %>%
   separate(.,
@@ -302,6 +302,12 @@ dat_hour %>%
   ggplot(., aes(x = Hour, y = Avg_Visits)) + 
   geom_col() +
   facet_wrap(~sub_category)
+
+```
+
+```{r}
+#Calculating average trip duration using bucketed dwell times
+
 
 ```
 
@@ -655,6 +661,8 @@ ggplot() +
   labs(title = "Philadelphia Commercial Corridors") + 
   mapTheme()
 
+---------
+
 ###Restaurants
 #Merge restaurants with commercial corridors 
 corridors_restaurants <- 
@@ -683,8 +691,10 @@ dat_restaurants_cord <- dat_restaurants %>%
 dat_corridors_restaurants <-
   st_join(corridors_filter, dat_restaurants_cord, ) %>% 
   group_by(NAME, GLA, Hour) %>%
-  summarize(Avg_Popularity = mean(Count),
-            Total_Visits = sum(Count)) %>%
+  summarize(
+            Avg_Popularity = mean(Count),
+            Total_Visits = sum(Count),
+            Med_Dwell_Time = mean(median_dwell)) %>%
   st_as_sf() 
 
 dat_corridors_restaurants <- dat_corridors_restaurants %>%
@@ -692,7 +702,6 @@ dat_corridors_restaurants <- dat_corridors_restaurants %>%
     GLA = as.numeric(gsub(",", "", GLA)),
     Visits_Per_Area = Total_Visits / GLA * 5)
 
- 
 #Plot of restaurant popularity between 7 and 8pm
 dat_corridors_restaurants %>%
   subset(Hour == 19) %>% #selecting for nighttime hours
@@ -701,6 +710,7 @@ dat_corridors_restaurants %>%
   geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
   scale_fill_viridis(trans = "sqrt") +
   labs(title = "Total Restaurant Visits by Commercial Corridor") 
+
 
 #Animation of restaurant popularity by hour
 restaurant.corr.animation.data <-
@@ -759,7 +769,8 @@ dat_corridors_bars <-
   st_join(corridors_filter, dat_bars_cord, ) %>% 
   group_by(NAME, GLA, Hour) %>%
   summarize(Avg_Popularity = mean(Count),
-            Total_Visits = sum(Count)) %>%
+            Total_Visits = sum(Count),
+            Med_Dwell_Time = mean(median_dwell)) %>%
   st_as_sf() 
 
 dat_corridors_bars <- dat_corridors_bars %>%
@@ -793,7 +804,7 @@ bar_corr_animation <-
   geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +   
   geom_sf(data = bar.corr.animation.data, aes(fill = Visits_Per_Area), color = "transparent") +
      scale_fill_viridis(trans = "sqrt") +
-    labs(title = "Restaurant Popularity by Hour",
+    labs(title = "Bar Popularity by Hour",
          subtitle = "One Hour Intervals: {current_frame}") +
   theme(panel.background = element_rect(fill = "black"),
          panel.grid.major = element_line(color = "transparent"),
@@ -806,5 +817,24 @@ animate(bar_corr_animation, duration=20, renderer = gifski_renderer())
 
 
 ### How long do people spend in establishments?
+```{r}
+#Plot of restaurant median dwell time 
+dat_corridors_restaurants %>%
+  subset(Hour == 19) %>% #selecting for nighttime hours
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "light gray", color = "white") +
+  geom_sf(aes(fill = Med_Dwell_Time), color = "transparent") + 
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Median Restaurant Dwell Time by Commercial Corridor") 
 
-[TBD]
+#Plot of bar median dwell time 
+dat_corridors_bars %>%
+  subset(Hour == 19) %>% #selecting for nighttime hours
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "light gray", color = "white") +
+  geom_sf(aes(fill = Med_Dwell_Time), color = "transparent") + 
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Median Bar Dwell Time by Commercial Corridor") 
+
+
+```
