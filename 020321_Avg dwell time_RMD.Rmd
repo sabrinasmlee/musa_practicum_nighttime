@@ -1,0 +1,70 @@
+---
+title: "020321_RMD"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+dat_cbg2 <-
+  dat %>%
+  select(safegraph_place_id,
+         poi_cbg, 
+         raw_visit_counts, 
+         raw_visitor_counts, 
+         median_dwell, 
+         distance_from_home)%>%
+  rename(., GEOID10 = poi_cbg) %>%
+  group_by(GEOID10) %>%
+  summarize(Avg_Visits = mean(raw_visit_counts),
+            Avg_Visitors = mean(raw_visitor_counts),
+            Total_Visits = sum(raw_visit_counts),
+            Total_Visitors = sum(raw_visitor_counts),
+            Avg_Dwell = mean(median_dwell),
+            Avg_DistHome = mean(distance_from_home)) %>%
+  left_join(phl_cbg) %>% 
+  st_as_sf() %>%
+  mutate(Visits_Per_Area = Total_Visits / Shape__Area) %>%
+  mutate(Visitors_Per_Area = Total_Visitors / Shape__Area)
+  
+ggplot() +
+  geom_sf(data = Avg_Dwell, fill = "black") +
+  scale_fill_viridis_c(option = "plasma") +
+  labs(title = "Median dwell") + 
+  mapTheme()
+  
+dat_cbg2 <-
+  dat %>%
+  filter(Avg_Dwell) %>%
+  group_by(safegraph_place_id) %>%
+  summarize(Count = n()) %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = 1) + 
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuintile Breaks") +
+  mapTheme() +
+  labs(title = "Average dwell by census block groups, Quintile breaks")
+  
+
+dat_cbg2 <-
+  dat %>%
+  filter(Avg_Dwell) %>%
+  group_by(safegraph_place_id) %>%
+  summarize(Count = n()) %>%
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey40", color = "transparent") +
+  geom_sf(aes(color = q5(Count)), size = 1) + 
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "CBG Count\nQuartile Breaks") +
+  mapTheme() +
+  labs(title = "Average dwell by census block groups, Quartile breaks")
+  
+  
+```
