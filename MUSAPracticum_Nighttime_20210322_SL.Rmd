@@ -223,6 +223,13 @@ phl_dist_unproj <-
 phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson", quiet = TRUE) %>%
   st_transform('ESRI:102728') %>%
   mutate(CODE = as.numeric(CODE))
+
+#Building footprints shpfile 
+phl_building_footprints <-
+  st_read("https://opendata.arcgis.com/datasets/ab9e89e1273f445bb265846c90b38a96_0.geojson", 
+          quiet = TRUE) %>%
+  st_transform('ESRI:102728')
+
 ```
 
 ## Philadelphia nightlife establishments
@@ -1279,6 +1286,24 @@ phl_blockgroups %>%
 
 ```
 
+```{r feature engineering for area of building}
+
+phl_building_footprints <-
+  dplyr::rename(phl_building_footprints, street_address = ADDRESS)
+
+#merge phl_building_footprints with safegraph dat 
+dat_building_footprints <- dat %>%
+  dplyr::select(safegraph_place_id, street_address, date_range_start, date_range_end, raw_visit_counts,
+                       raw_visitor_counts, visits_by_day, poi_cbg, visitor_home_cbgs, 
+                       visitor_daytime_cbgs, visitor_work_cbgs, visitor_country_of_origin,
+                       distance_from_home, median_dwell, bucketed_dwell_times, related_same_day_brand, 
+                       related_same_month_brand, popularity_by_hour, popularity_by_day, device_type) %>%
+  left_join(., phl_building_footprints, by = "street_address") %>% 
+  st_as_sf() 
+
+```
+
+
 ```{r import weather data for feature engineering}
 
 # Get 2018 weather data
@@ -1369,13 +1394,12 @@ Finally, we've generated nearest neighbor variables for the same businesses. So 
 #Nearest neighbor variables
 corr_test %>% 
   st_drop_geometry() %>%
-  pivot_longer(., cols = starts_with("nn_"), names_to = "variable", values_to="value") %>%
+  pivot_longer(., cols = starts_with("nn_distance_transit"), names_to = "variable", values_to="value") %>%
   ggplot(aes(value, visits)) +
   geom_point(size = .5) + 
   geom_smooth(formula = y ~ x, method = "lm", se=F, colour = "#FA7800") +
   facet_wrap(~variable, ncol = 3, scales = "free") +
-  labs(title = "Visits as a function of Nearest Neighbor Variables",
-       subtitle = "Figure X.X") +
+  labs(title = "Visits as a function of Nearest Neighbor Distance to SEPTA Transit stops") +
   plotTheme()
 ```
 
