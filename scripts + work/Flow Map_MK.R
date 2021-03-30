@@ -213,11 +213,11 @@ flows_nhood %>%
   ggplot() + 
   geom_polygon(data = PHL_boundary_unproj, aes(x=X, y=Y), fill = "grey20") +
   geom_curve(aes(x = lat.origin, y = long.origin, xend = lat.dest, yend = long.dest, 
-                   color=count, alpha = count),
+                 color=count, alpha = count),
              curvature = -0.2, 
-               arrow = arrow(length = unit(0.05, "cm")), 
-               size = 1, 
-               lineend = "round") +
+             arrow = arrow(length = unit(0.05, "cm")), 
+             size = 1, 
+             lineend = "round") +
   scale_colour_distiller(palette="YlGnBu", name="Count", guide = "colorbar", direction = 1) +
   coord_equal() +
   mapTheme() + 
@@ -249,7 +249,7 @@ flows_dist <- flows %>%
   left_join(phl_dist_cent, by=c("dist_origin"="DIST_NAME")) %>% 
   left_join(., phl_corr_cent, by=c("corridor_dest"="NAME")) %>%
   dplyr::rename(., origin.geom = geometry.x,
-                                 dest.geom = geometry.y)
+                dest.geom = geometry.y)
 
 flows_dist <- as.data.frame(flows_dist)
 

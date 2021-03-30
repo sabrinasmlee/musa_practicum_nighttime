@@ -1,0 +1,1877 @@
+---
+title: "MUSA Practicum Nighttime Economy: Exploratory Analysis"
+author: "Maddy Kornhauser, Brian Rawn, Sabrina Lee"
+date: "3/30/2021"
+output: 
+  html_document: 
+        code_folding: hide
+  toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	width=6000,
+	out.width = "100%"
+)
+```
+
+# 0. Weekly Updates 3/30/2021
+
+This week, we have begun the modelling process with feature engineering and developing a basic linear model. Our features fall broadly into the following categories:
+
+* *Philadelphia summary Features*: These are features that capture the built environment, such as the averaage size of the buildings along the corridor and the area of the corridor. 
+* *SafeGraph global Features*:  These are variables provided by SafeGraph to explain visitor behavior at various points of interest. This includes the average distance from home a visitor travels to a destination  or how long they spend at a destination. These have been aggregated up to the corridor level.
+* *Normalized Count Features*: These features normalize the number of amenities (business types, institutions) by the area of a given corridor.
+* *Nearest Neighbor Features*: These features capture nearest neighbor distance to other Philadelphia amenities, such as parks, transit and Center City.
+* *Demographic Features*: Pulled from the census, these features capture racial, and socio economic characteristics at the corridor level.
+
+We plan to meet with Matt on the Monday evening (3/29) before class to further discuss our approach to the model.
+
+This week, we also continued to refine our EDA graphics that we have updated below.
+
+# 1. Use Case Development
+
+## Purpose
+
+Our goal is to help business improvement districts (BIDs) and small businesses understand the patterns of nightlife across Philadelphia’s commercial corridors in order to further recovery efforts following the COVID-19 pandemic. 
+
+## The Tool
+
+An interactive data dashboard that allows users to understand nightlife patterns at the corridor level across Philadelphia. This dashboard would, for each corridor, answer the questions of “who, what, where, and when?” of nightlife visitors. The dashboard would also allow for comparisons to other corridors. Potential metrics that would be displayed include:
+
+* Corridor popularity (volume of trips) over time. 
+* The percentage of visitors attributable to different origin census tracts and a breakdown of associated demographic characteristics.
+* Average distance traveled to restaurants/bars/theaters.
+* Average dwell time by commercial use.
+* The percentage drop in trips that restaurants/bars/theaters experienced as a result of COVID-19.
+* For each, a comparison to the average of other commercial corridors.
+
+In addition, the tool will have the additional functionality of being able to predict the future popularity of a commercial corridor given changes in time (hour, day, month), weather, volume of commercial establishments (count or floor area), and retail mix. This predictive functionality would help inform decisions relating to the regulation and expansion of nightlife activities.
+
+## Applications
+
+How will this tool be utilized for economic development? Potential applications include use by BIDs and small businesses to:
+
+* Understand peak trip times by use and location in order to inform parking, transit, or commercial policies.
+* Understand relative popularity of commercial corridors to inform decisions to grant licenses or small business assistance.
+* Understand origins and demographics of visitors to more effectively target marketing resources. 
+* Understand the future effect of more commercial establishments or square footage in a given commercial corridor.
+
+# 2. The SafeGraph Dataset
+
+Safegraph uses anonymized cell phone GPS data to record trips to commercial points of interest. This data can tell us from where a trip was made, what time the trip was made, and how long the individual stated at the point of interest.
+
+* Pros: 
+  + Brand new dataset. 
+  + Lots of unexplored applications and potential insights
+
+* Cons: 
+  + Data is new and has a significant amount of incorrectly attributed trips, especially in urban areas
+
+# 3. Exploratory Data Analysis
+
+```{r load packages, include=FALSE}
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(lubridate)
+library(datetime)
+library(viridis)
+library(gridExtra)
+library(kableExtra)
+library(dplyr)
+library(ggplot2)
+library(gganimate)
+library(FNN)
+library(caret)
+library(stargazer)
+
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 3),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+palette3 <- viridis_pal()(3)
+palette5 <- viridis_pal()(5)
+mapTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2)
+  )
+}
+plotTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 16,colour = "black"),
+    plot.subtitle = element_text(face="italic"),
+    plot.caption = element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.1),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.background = element_rect(fill = "grey80", color = "white"),
+    strip.text = element_text(size=12),
+    axis.title = element_text(size=12),
+    axis.text = element_text(size=10),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(colour = "black", face = "italic"),
+    legend.text = element_text(colour = "black", face = "italic"),
+    strip.text.x = element_text(size = 14)
+  )
+}
+nn_function <- function(measureFrom,measureTo,k) {
+  measureFrom_Matrix <- as.matrix(measureFrom)
+  measureTo_Matrix <- as.matrix(measureTo)
+  nn <-   
+    get.knnx(measureTo, measureFrom, k)$nn.dist
+  output <-
+    as.data.frame(nn) %>%
+    rownames_to_column(var = "thisPoint") %>%
+    gather(points, point_distance, V1:ncol(.)) %>%
+    arrange(as.numeric(thisPoint)) %>%
+    group_by(thisPoint) %>%
+    dplyr::summarize(pointDistance = mean(point_distance)) %>%
+    arrange(as.numeric(thisPoint)) %>% 
+    dplyr::select(-thisPoint) %>%
+    pull()
+  
+  return(output)  
+}
+
+setwd("~/GitHub/musa_practicum_nighttime")
+```
+
+```{r load & wrangle data}
+dat <- read.csv("./data/moves_2018.csv")
+phila <- st_read("./demo/phila.geojson", quiet = TRUE)
+
+dat2 <- dat %>% 
+  dplyr::select(safegraph_place_id, 
+                date_range_start, 
+                date_range_end, 
+                raw_visit_counts,
+                raw_visitor_counts, 
+                visits_by_day, 
+                poi_cbg, 
+                visitor_home_cbgs, 
+                visitor_daytime_cbgs, 
+                visitor_work_cbgs, 
+                visitor_country_of_origin,
+                distance_from_home, 
+                median_dwell, 
+                bucketed_dwell_times, 
+                related_same_day_brand, 
+                related_same_month_brand, 
+                popularity_by_hour, 
+                popularity_by_day, 
+                device_type) %>%
+  left_join(., phila, by = "safegraph_place_id") %>% 
+  st_as_sf() %>%
+  st_transform('ESRI:102728')
+
+#Block group shapefiles (projected & unprojected)
+phl_cbg <- 
+  st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson", quiet = TRUE) %>%
+  mutate(GEOID10 = as.numeric(GEOID10))%>%
+  st_transform('ESRI:102728') 
+phl_cbg_unproj <- 
+  st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson", quiet = TRUE) %>%
+  mutate(GEOID10 = as.numeric(GEOID10),
+         Lat = as.numeric(INTPTLAT10),
+         Lon = as.numeric(INTPTLON10))
+
+#Boundaries shapefiles (projected & unprojected)
+PHL_boundary <- 
+  st_read("https://opendata.arcgis.com/datasets/405ec3da942d4e20869d4e1449a2be48_0.geojson", quiet = TRUE)%>%
+  st_transform('ESRI:102728') 
+PHL_boundary_unproj <- 
+  st_read("https://opendata.arcgis.com/datasets/405ec3da942d4e20869d4e1449a2be48_0.geojson", quiet = TRUE)
+
+#Corridor shapefiles (projected & unprojected)
+phl_corridors <- st_read("http://data.phl.opendata.arcgis.com/datasets/f43e5f92d34e41249e7a11f269792d11_0.geojson", quiet = TRUE)%>%
+  st_transform('ESRI:102728') %>%
+  mutate(corr_type = ifelse(CORRIDOR_TYPE == 1, "1. Neighborhood Subcenter", 
+                            ifelse(CORRIDOR_TYPE == 2, "2. Neighborhood Center", 
+                                   ifelse(CORRIDOR_TYPE == 3, "3. Community Center", 
+                                          ifelse(CORRIDOR_TYPE == 4, "4. Regional Center", 
+                                                 ifelse(CORRIDOR_TYPE == 5, "5. Superregional Center", 
+                                                        ifelse(CORRIDOR_TYPE == 6, "6. Speciality Center", "Other")))))))
+
+phl_corridors_unproj <- st_read("http://data.phl.opendata.arcgis.com/datasets/f43e5f92d34e41249e7a11f269792d11_0.geojson", quiet = TRUE)
+
+#Neighborhood shapefiles (projected & unprojected)
+phl_nhoods <- 
+  st_read("https://raw.githubusercontent.com/azavea/geo-data/master/Neighborhoods_Philadelphia/Neighborhoods_Philadelphia.geojson", 
+          quiet = TRUE) %>%
+  st_transform('ESRI:102728')
+phl_nhoods_unproj <- 
+  st_read("https://raw.githubusercontent.com/azavea/geo-data/master/Neighborhoods_Philadelphia/Neighborhoods_Philadelphia.geojson", 
+          quiet = TRUE)
+
+#Planning district shapefiles (projected & unprojected)
+phl_dist <-
+  st_read("http://data.phl.opendata.arcgis.com/datasets/0960ea0f38f44146bb562f2b212075aa_0.geojson", 
+          quiet = TRUE) %>%
+  st_transform('ESRI:102728')
+
+phl_dist_unproj <-
+  st_read("http://data.phl.opendata.arcgis.com/datasets/0960ea0f38f44146bb562f2b212075aa_0.geojson", 
+          quiet = TRUE)
+
+#Philadelphia zip codes
+phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson", quiet = TRUE) %>%
+  st_transform('ESRI:102728') %>%
+  mutate(CODE = as.numeric(CODE))
+```
+
+## Philadelphia nightlife establishments
+
+Our first research question is where Philadelphia nightlife establishments are located across the city. The following maps indicate where businesses that contribute to the city's nightlife economy are located. The categories include:
+
+* Bars (Drinking Places)
+* Restaurants 
+* Arts Venues (Promotes of Performing Arts)
+
+Figure X.X below shows the spatial patterns of the business categories. Bars and restaurants represent the highest number of businesses which are spread across the city. Hotels are mostly clustered in the central district of the city and near the airport in the southwest portion of the city. There are far fewer casinos and arts venues.
+
+Throughout the analysis, we pay special attention to bars and restaurants, as these organizations are well distributed throughout the city and apply to a local Philadelphia customer base.
+
+```{r establishment locations}
+dat2 %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
+           top_category == "Restaurants and Other Eating Places" |
+           # top_category == "Traveler Accommodation" |
+           # top_category == "Gambling Industries" |
+           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "grey80", color = "transparent") +
+  geom_sf(color = "red", size = .1) +
+  labs(title = "Location of Nightlife Establishments",
+       subtitle = "Figure X.X") +
+  facet_wrap(~top_category, nrow = 1) +
+  mapTheme()
+```
+
+To look at the spatial patterns another way, we review the distribution of businesses  with a fishnet grid. The fishnet allows us to visualize clusters and hotspots. Starting first with restaurants, Figure X.X below demonstrates the spatial patterns of these businesses.  Though restaurants are well distributed throughout the city, there appears to be a higher concentration of yellow cells (indicating a higher count of restaurants) in the central part of the city. This corresponds to what we observe in the point data analysis. 
+```{r unnesting hour dataset}
+#Unnesting popularity by hour variable
+dat_hour <- 
+  dat2 %>% 
+  select(safegraph_place_id, top_category, sub_category, popularity_by_hour, poi_cbg, median_dwell) %>%
+  mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
+  unnest(popularity_by_hour) %>%
+  separate(.,
+           popularity_by_hour,
+           c("0", "1", "2", "3", "4", "5", "6", 
+             "7", "8", "9", "10", "11", "12", 
+             "13", "14", "15", "16", "17", "18",
+             "19", "20", "21", "22", "23"),
+           sep = ",") %>%
+  pivot_longer(cols = 4:27,
+               names_to = "Hour",
+               values_to = "Count") %>%
+  mutate(Hour = as.numeric(Hour),
+         Count = as.numeric(Count))
+
+#Creating a fishnet
+phillyBoundary <- 
+  phl_zip %>%
+  select(geometry) %>%
+  st_union() %>%
+   st_transform('ESRI:102728') %>% 
+  st_as_sf() 
+
+fishnet <- 
+  st_make_grid(phillyBoundary, cellsize = 1500, square = FALSE) %>%
+  .[phillyBoundary] %>% #MK added this line
+  st_sf() %>%
+  mutate(uniqueID = rownames(.))
+
+# #Plot fishnet
+# ggplot() +
+#   geom_sf(data = fishnet, fill = "#440255", color = "black")
+
+```
+
+Figure X.X below includes other sectors that contribute to Philadelphia's nightlife economy such as hotels and casinos. This figure combines the fishnets into a single panel that allows us to compare distribution of industries across business type.
+```{r}
+#Filter restaurants
+restaurants <- dat2 %>%
+  filter(top_category == "Restaurants and Other Eating Places")%>%
+    st_transform('ESRI:102728')%>%
+  mutate(Legend = "Restaurants")
+
+#aggregate restaurant count by fishnet cell
+restaurants_net <-
+  dplyr::select(restaurants) %>% 
+  mutate(countRestaurants = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countRestaurants = replace_na(countRestaurants, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
+
+#Bars
+bars <- dat2 %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)")%>%
+    st_transform('ESRI:102728')%>%
+  mutate(Legend = "Bars")
+
+#aggregate bars by fishnet cell
+bars_net <-
+  dplyr::select(bars) %>% 
+  mutate(countBars = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countBars = replace_na(countBars, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE)) %>%
+  mutate(Legend = "Bars")
+
+# #Casinos
+# casinos <- dat2 %>%
+#   filter(top_category == "Gambling Industries") %>%
+#   st_transform('ESRI:102728') %>%
+#   mutate(Legend = "Casinos")
+# 
+# casinos_net <-
+#   dplyr::select(casinos) %>% 
+#   mutate(countCasinos = 1) %>% 
+#   aggregate(., fishnet, sum) %>%
+#   mutate(countCasinos = replace_na(countCasinos, 0),
+#          uniqueID = rownames(.),
+#          cvID = sample(round(nrow(fishnet) / 24), 
+#                        size=nrow(fishnet), replace = TRUE))
+
+#Performing arts
+performingarts <- dat2 %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  st_transform('ESRI:102728') %>%
+  mutate(Legend = "Performing Arts")
+
+performingarts_net <-
+  dplyr::select(performingarts) %>% 
+  mutate(countPerformingarts = 1) %>% 
+  aggregate(., fishnet, sum) %>%
+  mutate(countPerformingarts = replace_na(countPerformingarts, 0),
+         uniqueID = rownames(.),
+         cvID = sample(round(nrow(fishnet) / 24), 
+                       size=nrow(fishnet), replace = TRUE))
+
+# #Hotels
+# hotels <- dat2 %>%
+#   filter(top_category == "Traveler Accommodation") %>%
+#   st_transform('ESRI:102728') %>%
+#   mutate(Legend = "Hotels")
+# 
+# hotels_net <-
+#   dplyr::select(hotels) %>% 
+#   mutate(countHotels = 1) %>% 
+#   aggregate(., fishnet, sum) %>%
+#   mutate(countHotels = replace_na(countHotels, 0),
+#          uniqueID = rownames(.),
+#          cvID = sample(round(nrow(fishnet) / 24), 
+#                        size=nrow(fishnet), replace = TRUE))
+
+# Combining fishnets into a single dataframe
+vars_net <- 
+  rbind(restaurants, 
+        bars, 
+        performingarts
+        # , 
+        # casinos, 
+        # hotels
+        ) %>%
+  st_join(., fishnet, join=st_within) %>%
+  st_drop_geometry() %>%
+  group_by(uniqueID, Legend) %>%
+  dplyr::summarize(count = n()) %>%
+    full_join(fishnet) %>%
+    spread(Legend,count, fill=0) %>%
+    st_sf() %>%
+    dplyr::select(-`<NA>`) %>%
+    na.omit() %>%
+    ungroup()
+
+vars_net.long <- 
+  gather(vars_net, Variable, value, -geometry, -uniqueID)
+
+vars <- unique(vars_net.long$Variable)
+mapList <- list()
+
+#Plotting small multiple maps
+for(i in vars){
+  mapList[[i]] <- 
+    ggplot() +
+      geom_sf(data = filter(vars_net.long, Variable == i), aes(fill=value), colour=NA) +
+      scale_fill_viridis(name="") +
+      labs(title=i) +
+      mapTheme()}
+
+do.call(grid.arrange, c(mapList, ncol=3, top="Count of Nightlife Businesses per Fishnet", bottom = "Figure X.X"))
+```
+
+## Nightlife hours
+
+Next, we explore when visitors make trips to nightlife establishments. To do this, we worked with the popularity_by_hour SafeGraph variable, which sums the total number of visitors by hour for each month.
+
+Figure X.X shows the average foot traffic by business type over the course of a day. This graphic indicates that though certain business types are considererd part of the nightlife economy, they do not exclusively experience traffic in the evenings. Restaurants are a good example of this, where the data indicates that the highest levels of traffic occur in the middle of the day. Arts venues, on the other hand, have a clear patterns indicating that they are more popular later in the day.
+```{r traffic by nightlife establishment}
+dat_hour %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
+           top_category == "Restaurants and Other Eating Places" |
+           # top_category == "Traveler Accommodation" |
+           # top_category == "Gambling Industries" |
+           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  group_by(Hour, top_category) %>%
+  dplyr::summarize(Count = mean(Count)) %>%
+  ggplot(., aes(x = Hour, y = Count)) + 
+  geom_col() +
+  labs(title = "Philadelphia Nightlife Organizations, Average Traffic by Hour",
+       subtitle = "Figure X.X") +
+  facet_wrap(~top_category, scales = "free") +
+  plotTheme()
+```
+
+The following animation shows restaurant visitor counts by census block group over the course of the day. We observe the highest amount of traffic in center city in the middle of the day and then a resurgence of traffic elsewhere in the city in the evening. This suggests that people dine at neighborhood establishments close to their home in the evening.
+```{r}
+dat_restaurants <-
+  dat_hour %>%
+  filter(top_category == "Restaurants and Other Eating Places") 
+
+dat_restaurant_filter <-
+  dat_restaurants %>%
+  dplyr::rename(., GEOID10 = poi_cbg) %>%
+  dplyr::group_by(GEOID10, Hour) %>%
+  dplyr::summarize(Avg_Popularity = mean(Count),
+            Total_Visits = sum(Count)) %>%
+  left_join(phl_cbg) %>% 
+  st_as_sf() %>%
+  mutate(Visits_Per_Area = Total_Visits / Shape__Area * 100)
+
+#Animation of restaurant popularity by hour
+restaurant.animation.data <-
+    dat_restaurant_filter %>%
+    st_sf() %>%
+    mutate(Pop_String = case_when(Visits_Per_Area < .4 ~ "5",
+                              Visits_Per_Area >= .4 & Visits_Per_Area <.8 ~ "4",
+                              Visits_Per_Area >= .8 & Visits_Per_Area <1.2 ~ "3",
+                              Visits_Per_Area >= 1.2 & Visits_Per_Area <1.6 ~ "2",
+                              Visits_Per_Area >= 2 ~ "1")) %>%
+    mutate(Pop_String  = fct_relevel(Pop_String, "5","4","3","2","1"))
+
+restaurant_animation <-
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +   
+  geom_sf(data = restaurant.animation.data, aes(fill = Pop_String), color = "transparent") +
+    scale_fill_manual(values = palette5) +
+    labs(title = "Restaurant Popularity by Hour",
+         subtitle = "One Hour Intervals: {current_frame}") +
+  theme(panel.background = element_rect(fill = "black"),
+         panel.grid.major = element_line(color = "transparent"),
+          panel.grid.minor = element_line(colour = "transparent")) +
+    transition_manual(Hour)
+  
+
+animate(restaurant_animation, duration=20, renderer = gifski_renderer())
+```
+
+The following animation shows the same metric for bars. We observe traffic increasing throughout the day starting in the afternoon.
+```{r bar animation}
+#Bar Analysis
+#Filter Bars
+dat_bars <- dat_hour %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") 
+
+#Merge CBGs with popularity by hour data
+dat_bars_filter <-
+  dat_bars %>%
+  dplyr::rename(., GEOID10 = poi_cbg) %>%
+  dplyr::group_by(GEOID10, Hour) %>%
+  dplyr::summarize(Avg_Popularity = mean(Count),
+            Total_Visits = sum(Count)) %>%
+  left_join(phl_cbg) %>% 
+  st_as_sf() %>%
+  mutate(Visits_Per_Area = Total_Visits / Shape__Area * 100)
+
+#Animation of bar popularity by hour
+bar.animation.data <-
+    dat_bars_filter %>%
+    st_sf() %>%
+    mutate(Pop_String = case_when(Visits_Per_Area == 0 ~ "5",
+                              Visits_Per_Area > 0 & Visits_Per_Area <.2 ~ "4",
+                              Visits_Per_Area >= .2 & Visits_Per_Area <.4 ~ "3",
+                              Visits_Per_Area >= .4 & Visits_Per_Area <.6 ~ "2",
+                              Visits_Per_Area >= .6 ~ "1")) %>%
+    mutate(Pop_String  = fct_relevel(Pop_String, "5","4","3","2","1"))
+
+bar_animation <-
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent", ) +
+  geom_sf(data = bar.animation.data, aes(fill = Pop_String), color = "transparent") +
+    scale_fill_manual(values = palette5) +
+    labs(title = "Bar Popularity by Hour",
+         subtitle = "One Hour Intervals: {current_frame}") +
+  theme(panel.background = element_rect(fill = "black"),
+         panel.grid.major = element_line(color = "transparent"),
+          panel.grid.minor = element_line(colour = "transparent")) +
+    transition_manual(Hour)
+
+animate(bar_animation, duration=20, renderer = gifski_renderer())
+```
+
+## Trip Flows
+
+### Origins & destinations
+
+The SafeGraph data fundamentally captures flow of people across space by connecting a series of origins and destinations. By mapping the origins and destinations of trips taking place across Philadlephia, we can observe which regions of the city draw from a larger crowd across the city, and which areas cater to a more local population.
+
+The following maps look at the origins and destinations for trips to restaurants, bars, and arts venues across the city. Specifically, it shows the distance between the centroid of the origin neighborhood to the centroid of the destination commercial corridor. We selected 6 corridors across Philadelphia in different areas of the city that we felt represented a diverse array of commercial corridors in the city. Going forward, we would like to run a K-means clustering test to help sort the corridors into like categories that will help us understand the distinct profiles of corridors in Philadelphia.
+
+The code draws each line segments based on lat/long coordinates of the origin an destination centroid (could not get this to work with projected data). Note that trips to destinations located outside of the commercial corridors are left off of these maps. 
+
+The following code block loads unprojected shapefiles for the block groups and city boundary as well as wrangle the data into a list of individual origins and destinations for nightlife-related businesses.
+```{r flows data wrangling}
+flows <- dat2 %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
+           top_category == "Restaurants and Other Eating Places" |
+           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>% #filter for business types
+  st_join(phl_corridors) %>% #join destinations to phl corridors (apply corridor destination to each trip)
+  st_as_sf() %>%
+  st_drop_geometry() %>% 
+  select(safegraph_place_id, 
+         date_range_start,
+         top_category,
+         poi_cbg,
+         visitor_home_cbgs,
+         NAME.y) %>% #select columns
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>% #unnest visitor cbg column
+  separate(.,
+           visitor_home_cbgs,
+           c("visitor_cbg", "count"),
+           sep = ":") %>% #separate count column from visitor cbg
+  mutate(count = as.numeric(count),
+         visitor_cbg = as.numeric(visitor_cbg)) %>%
+  dplyr::rename(., corridor_dest = NAME.y) %>%
+  drop_na(corridor_dest) #Remove trips with destinations outside of corridors
+
+#prepare PHL boundary file to coordinates for plotting
+PHL_boundary_unproj <- 
+  PHL_boundary_unproj %>% 
+  st_coordinates() # split out coordinates 
+
+PHL_boundary_unproj <-
+  as.data.frame(PHL_boundary_unproj) # save as dataframe
+
+#----MAP V1: NEIGHBORHOOD CENTROID TO CORRIDOR CENTROIDS
+#Generate CBG centroid
+phl_cbg_cent <- 
+  phl_cbg_unproj %>% 
+  select(GEOID10, geometry) %>% 
+  st_centroid()
+
+#Generate neighborhood centroids
+phl_nhood_cent <- 
+  phl_nhoods_unproj %>% 
+  select(name) %>%
+  st_centroid()
+
+#Generate corridor centroid
+phl_corr_cent <- 
+  phl_corridors_unproj %>% 
+  select(NAME, geometry) %>% 
+  st_centroid()
+
+#Join CBG centroid to neighborhood shapefile
+phl_cbg_nhood <- 
+  st_join(phl_nhoods_unproj, phl_cbg_cent, join = st_intersects) %>%
+  select(GEOID10, name) %>%
+  st_centroid()
+
+flows_nhood <- flows %>%
+  left_join(phl_cbg_nhood, by=c("visitor_cbg"="GEOID10")) %>% #join visitor CBGs to nhoods
+  dplyr::rename(., nhood_origin = name) %>% #cleanup columns for clarity
+  drop_na(nhood_origin) %>% #dropping trips outside of Philadelphia
+  st_as_sf() %>%
+  st_drop_geometry() %>% 
+  group_by(nhood_origin, top_category, corridor_dest) %>% #grouping trip counts by origin neighborhood
+  summarize(count = sum(count)) %>%
+  left_join(phl_nhood_cent, by=c("nhood_origin"="name")) %>% #join origin nhood to nhood centroid
+  left_join(., phl_corr_cent, by=c("corridor_dest"="NAME")) %>% #join destination corridor to corr centroid
+  dplyr::rename(., origin.geom = geometry.x,
+                        dest.geom = geometry.y) #clean-up columns for clarity
+
+#Convert from tibble to data frame for next step
+flows_nhood <- as.data.frame(flows_nhood) 
+
+#split point data into lat and long columns
+flows_nhood <- flows_nhood %>% 
+  mutate(lat.origin = unlist(map(flows_nhood$origin.geom,1)),
+         long.origin = unlist(map(flows_nhood$origin.geom,2)),
+         lat.dest = unlist(map(flows_nhood$dest.geom,1)),
+         long.dest = unlist(map(flows_nhood$dest.geom,2)),
+         id = as.character(c(1:nrow(.))))
+
+#Maps - straight line segment example
+flows_nhood %>% 
+  filter(corridor_dest == "East Girard" | 
+           corridor_dest == 'Navy Yard' | 
+           corridor_dest == '5th and Olney' | 
+           corridor_dest == 'East Passyunk' |
+           corridor_dest == '36th Street and vicinity' |
+           corridor_dest == 'Market West') %>% 
+  ggplot() + 
+  geom_polygon(data = PHL_boundary_unproj, aes(x=X, y=Y), fill = "grey20") + 
+  geom_segment(aes(x = lat.origin, y = long.origin, xend = lat.dest, yend = long.dest,  
+                   color=count, alpha = count),
+               arrow = arrow(length = unit(0.01, "cm")), 
+               size = 1,
+               lineend = "round") +
+  scale_colour_distiller(palette="Reds", name="Count", guide = "colorbar", direction = 1) +
+  coord_equal() +
+  mapTheme() + 
+  facet_wrap(~corridor_dest, ncol = 2) +
+  labs(title = "Trips")
+```
+
+## Nightlife corridors in Philadelphia
+
+Next, we observe foot traffic along Philadelphia's commercial corridors. This analysis relies on a shapefile from the City of Philadelphia's Planning department which demarcates individual corridors and districts throughout the city. According to the [available metadata](https://metadata.phila.gov/#home/datasetdetails/564236a55737e1f263ae5e3f/representationdetails/56423a4e902dbdd813db9a55/) "locations range from large, regional and specialty destinations to corridors that reflect the evolving economy, culture, and aesthetic traditions of surrounding neighborhoods." This means that the gegoraphies vary in size and character.
+
+Figure X.X shows the different types of commercial corridors based on classifcation by Philadelphia.
+[INCLUDE DESCRIPTION OF COMMERCIAL CORRIDORS]
+
+```{r}
+###Corridors
+phl_boundary <- 
+  st_read("https://opendata.arcgis.com/datasets/405ec3da942d4e20869d4e1449a2be48_0.geojson", quiet = TRUE)%>%
+  st_transform('ESRI:102728')
+
+phl_corridors %>%
+  ggplot() +
+  geom_sf(data = phl_boundary, fill = "grey60", color = "transparent") +
+  geom_sf(aes(fill = corr_type), color = "transparent") +
+  scale_fill_viridis_d() +
+  labs(title = "Philadelphia Corridor Typologies",
+       subtitle = "Figure X.X") +
+  mapTheme() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+```
+
+The below Figure maps the commercial corridors and shows the corridor-wide vacancy rate, which varies from close to 0% to upwards of 60% throughout the city. Smaller corridors in far West Philadelphia, North Philadelphia tend to have the highest vacancy rates.
+```{r}
+#Load Philadelphia commercial corridors dataset and transform
+corridors <- phl_corridors
+
+dat_restaurants <-
+dat_hour %>%
+  filter(top_category == "Restaurants and Other Eating Places") 
+
+corridors_filter <- corridors %>%
+  select(OBJECTID, NAME, GLA, P_DIST, ST_EXT, PT_ADD, VAC_RATE) %>%
+  mutate(VAC_RATE = str_remove_all(VAC_RATE, pattern = "%")) %>%
+  mutate(VAC_RATE = as.numeric(VAC_RATE)) %>%
+  st_as_sf() %>%
+  st_transform('ESRI:102271') 
+
+# Plot commercial corridors with colors as vacancy rate
+ggplot() +
+  geom_sf(data = phillyBoundary, fill = "black") +
+  geom_sf(data = corridors_filter, aes(fill = VAC_RATE), color = "transparent") +
+  scale_fill_viridis_c(option = "plasma") +
+  labs(title = "Philadelphia Commercial Corridors") + 
+  mapTheme()
+```
+
+Figure X.X below breaks down the count of restaunts in a given corridor per square miile.  We find that central corridors and districts tend to have more restaurants per square mile. Other corridors. That said, corridors across the city have a high concentration of restaurants as well.
+```{r}
+###Restaurants (takes a really long time)
+dat_restaurants_grid <- dat_restaurants %>%
+  select(geometry) %>%
+  na.omit() %>%
+  st_as_sf() %>%
+  st_transform('ESRI:102271') %>% 
+    distinct()
+
+#Merge restaurants with commercial corridors 
+corridors_restaurants <- 
+  dplyr::select(dat_restaurants_grid) %>% 
+  mutate(countRestaurant = 1) %>% 
+  aggregate(., corridors_filter, sum) %>%
+  mutate(countRestaurant = replace_na(countRestaurant, 0),
+         uniqueID = rownames(.),
+         area = st_area(geometry) * .00000038610,
+         count_per_mile = as.numeric(countRestaurant / area),
+         cvID = sample(round(nrow(corridors_filter) / 24), size=nrow(corridors_filter), replace = TRUE))
+
+#Plot map of number of restaurants per square mile
+ggplot() +
+  geom_sf(data = phillyBoundary, fill = "black") +
+  geom_sf(data = corridors_restaurants, aes(fill = count_per_mile), color = "transparent") +
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Count of Restaurants per Square Mile in Each Commercial Corridor",
+       subtitle = "Figure X.X") +
+  mapTheme()
+```
+
+Below is an animation showing restaurant popularity by corridor.
+```{r}
+#Create animated map of number of restaurant trips by corridor per hour
+dat_restaurants_cord <- dat_restaurants %>%
+  st_as_sf() %>%
+  st_transform('ESRI:102271') 
+
+dat_corridors_restaurants <-
+  st_join(corridors_filter, dat_restaurants_cord, ) %>% 
+  group_by(NAME, GLA, Hour) %>%
+  summarize(
+            Avg_Popularity = mean(Count),
+            Total_Visits = sum(Count),
+            Med_Dwell_Time = mean(median_dwell)) %>%
+  st_as_sf() 
+
+dat_corridors_restaurants <- dat_corridors_restaurants %>%
+  mutate(
+    GLA = as.numeric(gsub(",", "", GLA)),
+    Visits_Per_Area = Total_Visits / GLA * 5)
+
+#Plot of restaurant popularity between 7 and 8pm
+# dat_corridors_restaurants %>%
+#   subset(Hour == 19) %>% #selecting for nighttime hours
+#   ggplot() + 
+#   geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
+#   geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+#   scale_fill_viridis(trans = "sqrt") +
+#   labs(title = "Total Restaurant Visits by Commercial Corridor") 
+
+
+#Animation of restaurant popularity by hour
+restaurant.corr.animation.data <-
+    dat_corridors_restaurants %>%
+    st_sf() %>%
+    mutate(Pop_String = case_when(Visits_Per_Area < .4 ~ "5",
+                              Visits_Per_Area >= .4 & Visits_Per_Area <.8 ~ "4",
+                              Visits_Per_Area >= .8 & Visits_Per_Area <1.2 ~ "3",
+                              Visits_Per_Area >= 1.2 & Visits_Per_Area <1.6 ~ "2",
+                              Visits_Per_Area >= 2 ~ "1")) %>%
+    mutate(Pop_String  = fct_relevel(Pop_String, "5","4","3","2","1"))
+
+restaurant_corr_animation <-
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +   
+  geom_sf(data = restaurant.corr.animation.data, aes(fill = Visits_Per_Area), color = "transparent") +
+     scale_fill_viridis(trans = "sqrt") +
+    labs(title = "Restaurant Popularity by Hour",
+         subtitle = "One Hour Intervals: {current_frame}") +
+  theme(panel.background = element_rect(fill = "black"),
+         panel.grid.major = element_line(color = "transparent"),
+          panel.grid.minor = element_line(colour = "transparent")) +
+    transition_manual(Hour)
+
+animate(restaurant_corr_animation, duration=20, renderer = gifski_renderer())
+```
+
+Figure X.X shows the number of bars in each commercial corridor per square mile. Again, we see the corridors around Center City generally showing a higher concentration of bars.
+```{r Bars by corridor}
+###Bars
+dat_bars_grid <- dat_bars %>%
+  select(geometry) %>%
+  #na.omit() %>%
+  st_as_sf() %>%
+  st_transform('ESRI:102271') %>%
+    distinct()
+
+###Bars
+corridors_bars <- 
+  dplyr::select(dat_bars_grid) %>% 
+  mutate(countBar = 1) %>% 
+  aggregate(., corridors_filter, sum) %>%
+  mutate(countBar = replace_na(countBar, 0),
+         uniqueID = rownames(.),
+         area = st_area(geometry) * .00000038610,
+         count_per_mile = as.numeric(countBar / area),
+         cvID = sample(round(nrow(corridors_filter) / 24), size=nrow(corridors_filter), replace = TRUE))
+
+#Plot map of number of bars per square mile
+ggplot() +
+  geom_sf(data = phillyBoundary, fill = "black") +
+  geom_sf(data = corridors_bars, aes(fill = count_per_mile), color = "transparent") +
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Count of Bars per Square Mile in Each Commercial Corridor", 
+       subtitle = "Figure X.X") +
+  mapTheme()
+```
+
+Below is an animation showing bar popularity aggregated by commercial corridor.
+```{r bars animation}
+#Create animated map of number of bar trips by corridor per hour
+dat_bars_cord <- dat_bars %>%
+  st_as_sf() %>%
+  st_transform('ESRI:102271') 
+
+dat_corridors_bars <-
+  st_join(corridors_filter, dat_bars_cord, ) %>% 
+  group_by(NAME, GLA, Hour) %>%
+  summarize(Avg_Popularity = mean(Count),
+            Total_Visits = sum(Count),
+            Med_Dwell_Time = mean(median_dwell)) %>%
+  st_as_sf() 
+
+dat_corridors_bars <- dat_corridors_bars %>%
+  mutate(
+    GLA = as.numeric(gsub(",", "", GLA)),
+    Visits_Per_Area = Total_Visits / GLA * 5)
+
+#Plot of bar popularity between 7 and 8pm
+# dat_corridors_bars %>%
+#   subset(Hour == 19) %>% #selecting for nighttime hours
+#   ggplot() + 
+#   geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +
+#   geom_sf(aes(fill = Visits_Per_Area), color = "transparent") + 
+#   scale_fill_viridis(trans = "sqrt") +
+#   labs(title = "Total Bar Visits by Commercial Corridor") 
+
+#Animation of bar popularity by hour
+bar.corr.animation.data <-
+    dat_corridors_bars %>%
+    st_sf() %>%
+    mutate(Pop_String = case_when(Visits_Per_Area < .4 ~ "5",
+                              Visits_Per_Area >= .4 & Visits_Per_Area <.8 ~ "4",
+                              Visits_Per_Area >= .8 & Visits_Per_Area <1.2 ~ "3",
+                              Visits_Per_Area >= 1.2 & Visits_Per_Area <1.6 ~ "2",
+                              Visits_Per_Area >= 2 ~ "1")) %>%
+    mutate(Pop_String  = fct_relevel(Pop_String, "5","4","3","2","1"))
+
+bar_corr_animation <-
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "#440255", color = "transparent") +   
+  geom_sf(data = bar.corr.animation.data, aes(fill = Visits_Per_Area), color = "transparent") +
+     scale_fill_viridis(trans = "sqrt") +
+    labs(title = "Bar Popularity by Hour",
+         subtitle = "One Hour Intervals: {current_frame}") +
+  theme(panel.background = element_rect(fill = "black"),
+         panel.grid.major = element_line(color = "transparent"),
+          panel.grid.minor = element_line(colour = "transparent")) +
+    transition_manual(Hour)
+
+animate(bar_corr_animation, duration=20, renderer = gifski_renderer())
+```
+
+Next, we look at SafeGraph variables in the context of commercial corridor typology. The following code wrangles the data to split it out into time segments.  This will help us better understand which corridor types are most associated with nightlife.
+```{r}
+dat_hour_unnest <- 
+  dat2 %>% 
+  select(safegraph_place_id, date_range_start, popularity_by_hour) %>%
+  mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
+  unnest(popularity_by_hour) %>%
+  separate(.,
+           popularity_by_hour,
+           c("0", "1", "2", "3", "4", "5", "6", 
+             "7", "8", "9", "10", "11", "12", 
+             "13", "14", "15", "16", "17", "18",
+             "19", "20", "21", "22", "23"),
+           sep = ",") %>%
+  pivot_longer(cols = 3:26,
+               names_to = "Hour",
+               values_to = "Count") %>%
+  mutate(Hour = as.numeric(Hour),
+         Count = as.numeric(Count))
+
+# dat2 %>% 
+#   select(safegraph_place_id, date_range_start, popularity_by_hour) %>%
+#   mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
+#   unnest(popularity_by_hour) %>%
+#   separate(.,
+#            popularity_by_hour,
+#            c("0", "1", "2", "3", "4", "5", "6", 
+#              "7", "8", "9", "10", "11", "12", 
+#              "13", "14", "15", "16", "17", "18",
+#              "19", "20", "21", "22", "23"),
+#            sep = ",") %>%
+#   pivot_longer(cols = 3:26,
+#                names_to = "Hour",
+#                values_to = "Count") %>%
+#   mutate(Hour = as.numeric(Hour),
+#          Count = as.numeric(Count))
+
+dat_1_6 <- dat_hour_unnest %>%
+  filter(Hour == "1" | 
+           Hour == "2" | 
+           Hour == "3" | 
+           Hour == "4" | 
+           Hour == "5" |
+           Hour == "6") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs1_6 = sum(Count)) 
+dat_7_12 <- dat_hour_unnest %>%
+  filter(Hour == "7" | 
+           Hour == "8" | 
+           Hour == "9" | 
+           Hour == "10" | 
+           Hour == "11" |
+           Hour == "12") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs7_12 = sum(Count)) 
+dat_13_18 <- dat_hour_unnest %>%
+  filter(Hour == "13" | 
+           Hour == "14" | 
+           Hour == "15" | 
+           Hour == "16" | 
+           Hour == "17" |
+           Hour == "18") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs13_18 = sum(Count)) 
+dat_19_0 <- dat_hour_unnest %>%
+  filter(Hour == "19" | 
+           Hour == "20" | 
+           Hour == "21" | 
+           Hour == "22" | 
+           Hour == "23" | 
+           Hour == "0") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs19_0 = sum(Count)) 
+dat_workday <- dat_hour_unnest %>%
+  filter(Hour == "9" | 
+           Hour == "10" | 
+           Hour == "11" | 
+           Hour == "12" | 
+           Hour == "13" | 
+           Hour == "14" |
+           Hour == "15" |
+           Hour == "16" |
+           Hour == "17" |
+           Hour == "18") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs_workday = sum(Count))
+
+#Join new dataset
+dat3 <- 
+  dat2 %>% 
+  left_join(dat_1_6, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_7_12, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_13_18, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_19_0, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_workday, by = c('safegraph_place_id', 'date_range_start')) %>%
+  st_join(phl_corridors, join = st_intersects) %>%
+  st_join(phl_nhoods, join = st_intersects) %>%
+  mutate(WorkDay_Evening_Ratio =  Hrs_workday / Hrs19_0)
+```
+
+Figure X.X below shows the total daily traffic volume by time segment. While there is not drastic differentiation by corridor, this chart indicates that Regional and Superregional corridors have a larger relative share of daytime traffic. This is likely related to these corridors being job hubs in Phialdelphia.
+```{r popularity by day barplot}
+dat3 %>%
+  st_drop_geometry() %>%
+  drop_na(corr_type) %>%
+  group_by(corr_type) %>%
+  summarise(Early_AM = sum(Hrs1_6),
+            Late_AM = sum(Hrs7_12),
+            Early_PM = sum(Hrs13_18),
+            Late_PM = sum(Hrs19_0)) %>%
+  pivot_longer(cols = 2:5,
+               names_to = "Time",
+               values_to = "Traffic") %>%
+  ggplot(aes(fill=factor(Time, levels=c("Late_PM", 
+                                        "Early_PM", 
+                                        "Late_AM", 
+                                        "Early_AM")), 
+             y=Traffic, 
+             x=factor(corr_type, levels=c("6. Speciality Center",
+                                          "5. Superregional Center",
+                                          "4. Regional Center",
+                                          "3. Community Center",
+                                          "2. Neighborhood Center",
+                                          "1. Neighborhood Subcenter")))) + 
+  geom_bar(position="fill", stat="identity") +
+  coord_flip() +
+  scale_fill_viridis_d() +
+  labs(title = "Total Daily Traffic Volume by Corridor Type",
+       subtitle = "Figure X.X") +
+  guides(fill=guide_legend(title=NULL)) +
+  plotTheme() +
+  theme(legend.position = "bottom",
+        legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank()) +
+  guides(fill = guide_legend(reverse = TRUE))
+
+```
+
+Figure X.X calculates the ratio between daytime traffic between 9AM and 6PM and evening traffic between 7PM and 12AM. The higher the ratio, the more daytime a corridor type is. Similar to the above Figure, This indicates that Regional and Superregional traffic sees relatively more traffic during work hours.
+```{r}
+#Workday to Evening Traffic Ratio by Corridor Type
+dat3 %>%
+  st_drop_geometry() %>%
+  drop_na(corr_type) %>%
+  filter_at(vars(WorkDay_Evening_Ratio), all_vars(!is.infinite(.))) %>%
+  group_by(corr_type) %>%
+  summarise(WorkDay_Evening_Ratio = mean(WorkDay_Evening_Ratio, na.rm = TRUE)) %>%
+  ggplot(aes(y=WorkDay_Evening_Ratio, 
+             x=corr_type)) + 
+  geom_bar(stat="identity") +
+  scale_fill_viridis_d() +
+  labs(title = "Average Workday to Evening Traffic Ratio by Corridor Type",
+       subtitle = "Figure X.X") +
+  guides(fill=guide_legend(title=NULL)) +
+  plotTheme()
+```
+
+## Visit duration to bars and restaurants in Philadelphia
+
+The following Figures look at the median dwell time by bars and restaurants per commercial corridor.
+```{r}
+#Restaurant data
+dat_corridors_restaurants <-
+  st_join(corridors_filter, dat_restaurants_cord, ) %>% 
+  group_by(NAME, GLA, Hour) %>%
+  summarize(
+            Avg_Popularity = mean(Count),
+            Total_Visits = sum(Count),
+            Med_Dwell_Time = mean(median_dwell)) %>%
+  st_as_sf() 
+
+dat_corridors_restaurants <- dat_corridors_restaurants %>%
+  mutate(
+    GLA = as.numeric(gsub(",", "", GLA)),
+    Visits_Per_Area = Total_Visits / GLA * 5)
+
+#Plot of restaurant median dwell time 
+dat_corridors_restaurants %>%
+  subset(Hour == 19) %>% #selecting for nighttime hours
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "light gray", color = "white") +
+  geom_sf(aes(fill = Med_Dwell_Time), color = "transparent") + 
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Median Restaurant Dwell Time by Commercial Corridor",
+       subtitle = "Figure X.X") +
+  mapTheme()
+
+#Plot of bar median dwell time 
+dat_corridors_bars %>%
+  subset(Hour == 19) %>% #selecting for nighttime hours
+  ggplot() + 
+  geom_sf(data = phl_cbg, fill = "light gray", color = "white") +
+  geom_sf(aes(fill = Med_Dwell_Time), color = "transparent") + 
+  scale_fill_viridis(trans = "sqrt") +
+  labs(title = "Median Bar Dwell Time by Commercial Corridor",
+       subtitle = "Figure X.X") +
+  mapTheme()
+```
+
+## Neighborhood and corridor comparisons
+
+Finally, we began exploring businesses at the corridor level and understand how different corridors attract different visitors from across the city. We plan to systematically expand the scope of this study to other corridors across the city. We also believe that this data is particularly relevant to business and economic development professionals in the COVID-19 recovery efforts.
+
+Using the Commercial Corridor shapefile available on Open Data Philly, we selected two corridors to compare:  East Girard Avenue, a central corridor in the Fishtown neighborhood, and West Girard Avenue in Brewerytown. 
+
+```{r East Girard data wrangling}
+#East Girard Corridor
+EastGirard_corr <- 
+  phl_corridors %>% 
+  filter(NAME == "East Girard") %>% 
+  st_as_sf()
+
+dat_EGC <- dat2[EastGirard_corr,]
+
+dat_EGC_cbg <- 
+  dat_EGC %>%
+  select(safegraph_place_id, 
+         date_range_start, 
+         top_category, 
+         sub_category, 
+         visitor_home_cbgs, 
+         geometry) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>%
+  separate(.,
+           visitor_home_cbgs,
+           c("cbg_origin", "visitors"),
+           sep = ":") %>%
+  mutate(cbg_origin = as.numeric(cbg_origin),
+         visitors = as.numeric(visitors)) %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
+           top_category == "Restaurants and Other Eating Places" |
+           top_category == "Traveler Accommodation" |
+           top_category == "Gambling Industries" |
+           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+    mutate(corridor = "East Girard")
+
+#West Girard
+WestGirard_corr <- 
+  phl_corridors %>% 
+  filter(NAME == "West Girard") %>% 
+  st_as_sf()
+
+dat_WGC <- dat2[WestGirard_corr,]
+
+dat_WGC_cbg <- 
+  dat_WGC %>%
+  select(safegraph_place_id, 
+         date_range_start, 
+         top_category, 
+         sub_category, 
+         visitor_home_cbgs, 
+         geometry) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\[|\\]")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = "\\{|\\}")) %>%
+  mutate(visitor_home_cbgs = str_remove_all(visitor_home_cbgs, pattern = '\\"|\\"')) %>%
+  mutate(visitor_home_cbgs = str_split(visitor_home_cbgs, pattern = ",")) %>%
+  unnest(visitor_home_cbgs) %>%
+  separate(.,
+           visitor_home_cbgs,
+           c("cbg_origin", "visitors"),
+           sep = ":") %>%
+  mutate(cbg_origin = as.numeric(cbg_origin),
+         visitors = as.numeric(visitors)) %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
+           top_category == "Restaurants and Other Eating Places" |
+           top_category == "Traveler Accommodation" |
+           top_category == "Gambling Industries" |
+           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  mutate(corridor = "West Girard")
+```
+
+Figures X.Xa and X.Xb show the volume of visitors to the East Girard Corridor (outlined in red) by census block group. While visitors from across the city frequent East Girard corridor, particularly for its restaurants, Figure X.Xb clarifies that the corridor mostly caters to a local customer base of surrounding census tracts.
+
+Block groups shaded gray indicate that no resident made a trip to this corridor.
+```{r}
+dat_EGC_cbg %>%
+  dplyr::group_by(cbg_origin, top_category) %>%
+  dplyr::summarize(visitors = sum(visitors)) %>%
+  st_drop_geometry() %>%
+  dplyr::rename(., GEOID10 = cbg_origin) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  st_as_sf() %>%
+  drop_na(geometry) %>% 
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+  geom_sf(aes(fill = q5(visitors), geometry = geometry), color = "transparent") + 
+  geom_sf(data = phl_nhoods, color = "white", fill = "transparent") +
+  geom_sf(data = EastGirard_corr, color = "red", fill = "transparent", lwd = 1) +
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "Visitor Count \n(Quintile)") +
+  mapTheme() +
+  labs(title = "East Girard Restaurants: Where do visitors come from?",
+       subtitle = "Figure X.Xa") +
+  facet_wrap(~top_category)
+
+dat_EGC_cbg %>%
+  dplyr::group_by(cbg_origin, top_category) %>%
+  dplyr::summarize(visitors = sum(visitors)) %>%
+  st_drop_geometry() %>%
+  dplyr::rename(., GEOID10 = cbg_origin) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  st_as_sf() %>%
+  drop_na(geometry) %>% 
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+  geom_sf(aes(fill = visitors, geometry = geometry), color = "transparent") + 
+  geom_sf(data = phl_nhoods, color = "white", fill = "transparent") +
+  geom_sf(data = EastGirard_corr, color = "red", fill = "transparent", lwd = .5) +
+  scale_fill_viridis() +
+  mapTheme() +
+  labs(title = "East Girard Restaurants: Where do visitors come from?",
+       subtitle = "Figure X.Xb") +
+  facet_wrap(~top_category)
+```
+
+Figures 3.12a and 3.12b show the volume of visitors to West Girard corridor. While the corridor appears to draw visitors from fewer census tracts overall, the corridor draws from a similarly local customer base of the surrounding block groups.
+
+As before, block groups shaded gray have no residents that made trips to this corridor.
+```{r West Girard viz}
+dat_WGC_cbg %>%
+  dplyr::group_by(cbg_origin, top_category) %>%
+  dplyr::summarize(visitors = sum(visitors)) %>%
+  st_drop_geometry() %>%
+  dplyr::rename(., GEOID10 = cbg_origin) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  st_as_sf() %>%
+  drop_na(geometry) %>% 
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+  geom_sf(aes(fill = q5(visitors), geometry = geometry), color = "transparent") + 
+  geom_sf(data = phl_nhoods, color = "white", fill = "transparent") +
+  geom_sf(data = WestGirard_corr, color = "red", fill = "transparent", lwd = 1) +
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "Visitor Count \n(Quintile)") +
+  mapTheme() +
+  labs(title = "West Girard: Where do visitors come from?",
+       subtitle = "Figure X.Xa") +
+  facet_wrap(~top_category)
+
+dat_WGC_cbg %>%
+  dplyr::group_by(cbg_origin, top_category) %>%
+  dplyr::summarize(visitors = sum(visitors)) %>%
+  st_drop_geometry() %>%
+  dplyr::rename(., GEOID10 = cbg_origin) %>%
+  left_join(phl_cbg, by = "GEOID10") %>%
+  st_as_sf() %>%
+  drop_na(geometry) %>% 
+  ggplot() +
+  geom_sf(data = phl_cbg, fill = "grey70", color = "transparent") +
+  geom_sf(aes(fill = visitors, geometry = geometry), color = "transparent") + 
+  geom_sf(data = phl_nhoods, color = "white", fill = "transparent") +
+  geom_sf(data = WestGirard_corr, color = "red", fill = "transparent", lwd = .5) +
+  scale_fill_viridis() +
+  mapTheme() +
+  labs(title = "East Girard Restaurants: Where do visitors come from?",
+       subtitle = "Figure X.Xb") +
+  facet_wrap(~top_category)
+```
+
+We can further explore the individual corridor analysis by tying the trip origins to census data. This allows us to construct a customer profile of the people visiting specific corridors throughout the city.
+```{r census pull}
+phl_blockgroups <- 
+  get_acs(geography = "block group", 
+        variables = c("B01003_001E", 
+                      "B02001_002E", 
+                      "B01002_001E",
+                      "B19013_001E", 
+                      "B25064_001E"),
+        year=2018, 
+        state=42, 
+        county=101, 
+        geometry=T, 
+        output = "wide") %>%
+  st_transform('ESRI:102728')%>%
+  rename(TotalPop = B01003_001E,
+         Whites = B02001_002E,
+         MedAge = B01002_001E,
+         MedHHInc = B19013_001E,
+         MedRent = B25064_001E,
+         GEOID10 = GEOID) %>%
+  dplyr::select(-NAME, -starts_with("B")) %>%
+  mutate(pctWhite = ifelse(TotalPop > 0, Whites / TotalPop,0),
+         GEOID10 = as.numeric(GEOID10)) %>%
+  dplyr::select(-Whites) 
+```
+
+The below Figure X.X compares demographic indicators pulled from the census across the two customer bases. East Girard corridor's customer base, shown in purple, tend to come from whiter census tracts with a higher median household income and median rent. West Girard corridor's customer base tend to come from less white census tracts with lower incomes and median rent. Both corridors, however, pull from census tracts with a similar median age.
+```{r corridor comparison}
+rbind(dat_EGC_cbg, dat_WGC_cbg) %>%
+  rename(GEOID10 = cbg_origin) %>%
+  dplyr::select(GEOID10, visitors, corridor) %>%
+  st_drop_geometry() %>%
+  left_join(phl_blockgroups, by = "GEOID10") %>%
+  pivot_longer(.,
+               cols = c("MedAge", "MedHHInc", "MedRent", "pctWhite"),
+               names_to = "variable") %>%
+  dplyr::select(GEOID10, corridor, visitors, variable, value) %>%
+  ggplot(., aes(x = value, fill = corridor, weight = visitors)) + 
+  geom_density(alpha = .5) +
+  scale_fill_manual(values = palette3,
+                    aesthetics = c("colour", "fill"),
+                    name = "Visitor Count \n(Quintile)") +
+  facet_wrap( ~ variable, scales = "free") +
+  plotTheme() +
+  labs(title = 'East Girard vs. West Girard Corridors',
+       subtitle = "Figure X.X")
+```
+
+# 4. Prediction Model
+
+Our model will predict the number of nighttime trips to commercial corridors (trips between the hours of 7PM and 12AM) given features of the corridor such as retail mix, amenities, location, etc. Ultimately, we plan to use this model as a scenario-based tool that allows users to adjust the business mix for a given corriodr as a way to understand how different economic development strategies will impact popularity.
+
+While the model will predict the number of trips, the ultimate output for the user will be relative popularity of the corridor compared to the average. This is becasue the data is inherently noisy and we cannot be confident that a raw trip count is accurate.
+
+## Data Pull
+This first code block loads in data that we will use for the predictive model.
+```{r loading in prediction data}
+#SafeGraph Features
+bar.sf <- dat2 %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+  select(location_name) %>%
+  st_as_sf(coords = "geometry", crs = 4326, agr = "constant")
+
+restaurant.sf <- dat2 %>%
+  filter(top_category == "Restaurants and Other Eating Places") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+arts.sf <- dat2 %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+college.sf <- dat2 %>%
+  filter(top_category == "Colleges, Universities, and Professional Schools") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+sports.sf <- dat2 %>%
+  filter(top_category == "Spectator Sports") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+casinos.sf <- dat2 %>%
+  filter(sub_category == "Casino Hotels") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+hotels.sf <- dat2 %>%
+  filter(sub_category == "Hotels (except Casino Hotels) and Motels") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+#Philadelphia Features
+phl_corridors_pred <- phl_corridors %>%
+  select(4:5,18, 'Shape__Area', 'corr_type') %>%
+  rename(., corridor = NAME,
+         district = P_DIST,
+         vacancy = VAC_RATE,
+         area = Shape__Area) %>%
+  mutate()
+
+phl_dist <-
+  st_read("http://data.phl.opendata.arcgis.com/datasets/0960ea0f38f44146bb562f2b212075aa_0.geojson",
+          quiet = TRUE) %>%
+  st_transform('ESRI:102728')
+
+phl_nhoods <- 
+  st_read("https://raw.githubusercontent.com/azavea/geo-data/master/Neighborhoods_Philadelphia/Neighborhoods_Philadelphia.geojson", quiet = TRUE) %>%
+  st_transform('ESRI:102728') %>%
+  select(mapname) %>%
+  rename(., neighborhood = mapname)
+
+CenterCity.sf <- phl_dist %>% 
+  select(DIST_NAME) %>%
+  filter(DIST_NAME == "Central") %>%
+  st_centroid()
+  
+septaStops <- 
+  rbind(
+    st_read("https://opendata.arcgis.com/datasets/8c6e2575c8ad46eb887e6bb35825e1a6_0.geojson", quiet = TRUE) %>% 
+      mutate(Line = "El") %>% 
+      st_transform('ESRI:102728') %>%
+      select(Station, Line),
+    st_read("https://opendata.arcgis.com/datasets/2e9037fd5bef406488ffe5bb67d21312_0.geojson", quiet = TRUE) %>%
+      mutate(Line ="Broad_St") %>%
+      st_transform('ESRI:102728') %>%
+      select(Station, Line)) 
+
+parks <-
+  st_read("https://opendata.arcgis.com/datasets/d52445160ab14380a673e5849203eb64_0.geojson", 
+          quiet = TRUE) %>%
+  st_transform('ESRI:102728') %>%
+  select(PUBLIC_NAME)
+
+phl_building_footprints <-
+  st_read("https://opendata.arcgis.com/datasets/ab9e89e1273f445bb265846c90b38a96_0.geojson", 
+          quiet = TRUE) %>%
+  dplyr::rename(., 
+                street_address = ADDRESS,
+                Building_area = Shape__Area) %>%
+  dplyr::select(street_address, Building_area) %>%
+  st_transform('ESRI:102728')
+
+#Demographic data
+phl_blockgroups <- 
+  get_acs(geography = "block group", 
+          variables = c("B01003_001E", 
+                        "B02001_002E", 
+                        "B01002_001E",
+                        "B19013_001E", 
+                        "B25064_001E",
+                        "B03002_012E",
+                        "B02001_003E"),
+          year=2018, 
+          state=42, 
+          county=101, 
+          geometry=T, 
+          output = "wide") %>%
+  st_transform('ESRI:102728')%>%
+  rename(TotalPop = B01003_001E,
+         White = B02001_002E,
+         MedAge = B01002_001E,
+         MedHHInc = B19013_001E,
+         MedRent = B25064_001E,
+         Hisp = B03002_012E,
+         Black = 	B02001_003E,
+         GEOID10 = GEOID) %>%
+  dplyr::select(-ends_with("M")) %>%
+  mutate(pctWhite = ((White / TotalPop)*100),
+         pctBlack = ((Black / TotalPop)*100),
+         pctHisp = ((Hisp / TotalPop)*100),
+         Context_Race = ifelse(pctWhite > .5, "Majority White", "Majority Non-White"),
+         Context_Income = ifelse(MedHHInc > 46116, "High Income", "Low Income"),
+         Context_Age = ifelse(MedAge > 34.5, "High Median Age", "Low Median Age"),
+         Context_Rent = ifelse(MedRent > 1032, "High Median Rent", "Low Median Rent")) %>%
+  st_as_sf()
+
+#Join demographic data to dat2
+dat2 <- st_join(dat2 %>% st_transform(crs=4326),
+                phl_blockgroups %>%
+                  st_transform(crs=4326),
+                join=st_intersects, 
+                left = TRUE) %>%
+  st_transform('ESRI:102728')
+
+st_c <- st_coordinates
+```
+
+## Feature Engineering
+Because we are looking to predict nighttime trips, we must isolate the trips that occur during the evening hours as our depedent variable. The folowing code aggregates datasets created above into a new dataframe that includes Philadelphia information, buildings and data by hourly trips. The dataframe drops all trips with destiantions outside of commercial corridors.
+```{r}
+dat_pred_temp <- 
+  dat2 %>% 
+  left_join(dat_1_6, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_7_12, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_13_18, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_19_0, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_workday, by = c('safegraph_place_id', 'date_range_start')) %>%
+  st_join(phl_nhoods) %>%
+  st_join(phl_corridors_pred) %>%
+  st_join(., phl_building_footprints) %>%
+  drop_na(corridor)
+```
+
+Next we wrangle the data to aggregate it at the corridor level. To start, we are looking at aggregated SafeGraph variables, such as median dwell time and average distance from home. 
+
+We also review the share of certain business types and characteristics along a specific corridor. These variables count the SafeGraph points of interest that fit into given category (bars, restaurants, college) and divide it by hte total number of businesses along the corridor. We also divide by 12 since the data is disaggregated by month.
+
+Finally, this code generates nearest neighbor variables for business by corridor.
+```{r Observe correlations}
+#Engineer SG variables
+dat_pred <-
+  dat_pred_temp %>%
+  mutate(total = 1,
+         bars = ifelse(top_category == 'Drinking Places (Alcoholic Beverages)', 1, 0),
+         restaurant = ifelse(top_category == 'Restaurants and Other Eating Places', 1, 0),
+         arts = ifelse(top_category == 'Promoters of Performing Arts, Sports, and Similar Events' |
+                         top_category == 'Performing Arts Companies', 1, 0),
+         restaurant = ifelse(top_category == 'Restaurants and Other Eating Places', 1, 0),
+         grocery_all = ifelse(top_category == 'Grocery Stores', 1, 0),
+         grocery = ifelse(sub_category == 'Supermarkets and Other Grocery (except Convenience) Stores', 1, 0),
+         malls = ifelse(sub_category == 'Malls', 1, 0),
+         amusement = ifelse(top_category == 'Other Amusement and Recreation Industries', 1, 0),
+         jrcol = ifelse(top_category == 'Junior Colleges', 1, 0),
+         college = ifelse(top_category == 'Colleges, Universities, and Professional Schools', 1, 0),
+         sports = ifelse(top_category == 'Spectator Sports', 1, 0),
+         museum = ifelse(top_category == 'Museums, Historical Sites, and Similar Institutions', 1, 0),
+         hotels = ifelse(top_category == 'Traveler Accommodation', 1, 0),
+         transit_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(septaStops)), 2),
+         bars_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(bar.sf)), 4),
+         rest_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(restaurant.sf)), 4),
+         arts_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(arts.sf)), 4),
+         college_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(college.sf)), 1),
+         sports_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(sports.sf)), 1),
+         hotels_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(hotels.sf)), 4),
+         casinos_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(casinos.sf)), 1),
+         parks_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(parks)), 4),
+         late_night = if_else(grepl("Late Night", dat_pred_temp$category_tags), 1, 0),
+         bar_pub = if_else(grepl("Bar or Pub", dat_pred_temp$category_tags), 1, 0),
+         drinks = if_else(grepl("Drinks", dat_pred_temp$category_tags), 1, 0),
+         cocktail = if_else(grepl("Cocktail Lounge", dat_pred_temp$category_tags), 1, 0),
+         SocHill = if_else(neighborhood == "Society Hill", 1, 0),
+         UCity = if_else(neighborhood == "University City", 1, 0),
+         NavyYard = if_else(neighborhood == "Navy Yard", 1, 0),
+         PM_Workday = Hrs19_0 / Hrs_workday,
+         AM_PM = (Hrs1_6 + Hrs7_12) / (Hrs13_18+Hrs19_0),
+         Center_City = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(CenterCity.sf)), 1))%>%
+  mutate_if(is.numeric, list(~na_if(., Inf)))
+
+#Aggregating by corridor
+dat_pred_agg <- 
+  dat_pred %>%
+  group_by(corridor) %>%
+  summarize(Night_visits = sum(Hrs19_0),
+            Night_log = log(Night_visits),
+            total = sum(total),
+            phl_area = mean(area),
+            phl_building_area = mean(Building_area, na.rm = TRUE),
+            sg_visitors = sum(raw_visitor_counts),
+            sg_visits = sum(raw_visit_counts),
+            sg_dwell = mean(median_dwell, na.rm = TRUE),
+            sg_distance_home = mean(distance_from_home, na.rm = TRUE),
+            sg_workday = mean(PM_Workday, na.rm = TRUE),
+            sg_AM_PM = mean(AM_PM, na.rm = TRUE),
+            count_bars_a = sum(bars, na.rm = TRUE)/phl_area,
+            count_rest_a = sum(restaurant, na.rm = TRUE)/phl_area,
+            count_arts_a = sum(arts, na.rm = TRUE)/phl_area,
+            # count_jrcol_a = sum(jrcol, na.rm = TRUE)/phl_area,
+            count_college_a = sum(college, na.rm = TRUE)/phl_area,
+            count_sports_a = sum(sports, na.rm = TRUE)/phl_area,
+            count_museums_a = sum(museum, na.rm = TRUE)/phl_area,
+            count_amuse_a = sum(amusement, na.rm = TRUE)/phl_area,
+            count_hotels_a = sum(hotels, na.rm = TRUE)/phl_area,
+            # count_bars_t = sum(bars, na.rm = TRUE)/total,
+            # count_rest_t = sum(restaurant, na.rm = TRUE)/total,
+            # count_arts_t = sum(arts, na.rm = TRUE)/total,
+            # count_jrcol_t = sum(jrcol, na.rm = TRUE)/total,
+            # count_college_t = sum(college, na.rm = TRUE)/total,
+            # count_sports_t = sum(sports, na.rm = TRUE)/total,
+            # count_museums_t = sum(museum, na.rm = TRUE)/total,
+            # count_amuse_t = sum(amusement, na.rm = TRUE)/total,
+            # count_hotels_t = sum(hotels, na.rm = TRUE)/total,
+            # log_bars_a = log(sum(bars, na.rm = TRUE)/phl_area),
+            # log_rest_a = log(sum(restaurant, na.rm = TRUE)/phl_area),
+            # log_arts_a = log(sum(arts, na.rm = TRUE)/phl_area),
+            # log_jrcol_a = log(sum(jrcol, na.rm = TRUE)/phl_area),
+            # log_college_a = log(sum(college, na.rm = TRUE)/phl_area),
+            # log_sports_a = log(sum(sports, na.rm = TRUE)/phl_area),
+            # log_museums_a = log(sum(museum, na.rm = TRUE)/phl_area),
+            # log_amuse_a = log(sum(amusement, na.rm = TRUE)/phl_area),
+            # log_bars_t = log(sum(bars, na.rm = TRUE)/total),
+            # log_rest_t = log(sum(restaurant, na.rm = TRUE)/total),
+            # log_arts_t = log(sum(arts, na.rm = TRUE)/total),
+            # log_jrcol_t = log(sum(jrcol, na.rm = TRUE)/total),
+            # log_college_t = log(sum(college, na.rm = TRUE)/total),
+            # log_sports_t = log(sum(sports, na.rm = TRUE)/total),
+            # log_museums_t = log(sum(museum, na.rm = TRUE)/total),
+            # log_amuse_t = log(sum(amusement, na.rm = TRUE)/total),
+            nn_transit = mean(transit_nn),
+            nn_CenterCity = mean(Center_City),
+            nn_parks = mean(parks_nn),
+            # nn_bars = mean(bars_nn),
+            # nn_rest = mean(rest_nn),
+            # nn_arts = mean(arts_nn),
+            # nn_college = mean(college_nn),
+            # nn_sports = mean(sports_nn),
+            # nn_casinos = mean(casinos_nn),
+            # nn_hotels = mean(hotels_nn),
+            count_late_tag = sum(late_night, na.rm = TRUE)/phl_area,
+            count_barpub_tag = sum(bar_pub, na.rm = TRUE)/phl_area,
+            count_drinks_tag = sum(drinks, na.rm = TRUE)/phl_area,
+            count_cocktail_tag = sum(cocktail, na.rm = TRUE)/phl_area,
+            demo_pctWhite = mean(pctWhite, na.rm = TRUE),
+            demo_pctBlack = mean(pctBlack, na.rm = TRUE),
+            demo_pctHisp = mean(pctHisp, na.rm = TRUE),
+            demo_medAge = mean(MedAge, na.rm = TRUE),
+            demo_MHI = median(MedHHInc, na.rm = TRUE),
+            demo_medrent = median(MedRent, na.rm = TRUE)) %>% 
+  mutate_if(is.numeric, list(~na_if(., Inf))) %>%
+  st_drop_geometry() %>%
+  left_join(phl_corridors_pred %>% select(corridor)) %>% 
+  drop_na(corridor, demo_MHI, demo_medrent) %>% #Some of the census variables aren't reporting for our block groups
+  st_as_sf() 
+```
+
+## Correlation Plots
+The following correlation plots summarize our findings. Looking first at the Phiadephia variables below, we see that the area of the corridor as well as the average size of buildings have a positive relationship with the number of nighttime visits.
+```{r phl corr plots}
+#Philadelphia summary variables
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("phl_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_visits)) +
+  geom_point(size = .5) +
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Nighttime Visits as a function of Philadelphia Summary Variables",
+       subtitle = "Figure X.X") +
+  plotTheme()
+```
+
+Next, we observe that of the SafeGraph summary variables, the distnace from home has a strong relationship with total visits. The count of visitors also demonstrates a strong relationship, but this is likely collinear with the the number of visits.
+```{r sg corr plots}
+#Safegraph summary variables
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("sg_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_visits)) +
+  geom_point(size = .5) +
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Nighttime Visits as a function of Gobal SafeGraph Summary Variables",
+       subtitle = "Figure X.X") +
+  plotTheme()
+```
+
+The next set of plots show the relationship between the share a specific business type by corridor and the number of trips. There seems to be a relationship with businesses that could be classified as anchor institutions, such as colleges and museums, and the number of trips. These corrplots also look at businesses with a specific tag, such as a "late night" or "bar and pub". 
+```{r count corrplots}
+#Count variables
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("count_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_visits)) +
+  geom_point(size = .5) +
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 4, scales = "free") +
+  labs(title = "Nighttime Visits as a function of Normalized Count Variables",
+       subtitle = "Figure X.X") +
+  plotTheme()
+```
+
+We also generated nearest neighbor variables for the corridors based on the average nearest neighbor variable for each of the destinations along a corridor. Though not as strong as the other variables we have reviewed above, these do demonstrate a negative relationship indicating that the further away a corridor is from these amenities, the less traffic to a corridor.
+```{r nn corrplots}
+#Nearest neighbor variables
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("nn_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_visits)) +
+  geom_point(size = .5) +
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Nighttime Visits as a function of Nearest Neighbor Variables",
+       subtitle = "Figure X.X") +
+  plotTheme()
+```
+
+Finally, we created demographic variables from census data. We pulled census information, joined it to the individual destinations and then aggregated the variables by commercial corridor. The median rent variable appears to have the strongest relationship with the depedent nighttime traffic variable.
+```{r census corrplot}
+##Demographic Variables
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("demo_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_visits)) +
+  geom_point(size = .5) +
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Nighttime Visits as a function of Demographic Variables",
+       subtitle = "Figure X.X") +
+  plotTheme()
+```
+
+## Model & Cross Validation
+
+Using the features we engineered above, we split our data into a training and test set and run a linear regression model in the following code block. The results of the regression are shown below.
+```{r model building, echo=FALSE}
+#Setting up test and training datasets
+inTrain <- createDataPartition(y=dat_pred_agg$Night_visits,
+                               p = .60, list = FALSE)
+
+phl.training <- dat_pred_agg[inTrain,] 
+phl.test <- dat_pred_agg[-inTrain,]  
+
+#Multivariate regression
+reg1 <- lm(Night_visits ~ ., data = st_drop_geometry(phl.training) %>% 
+             select(Night_visits, 
+                    phl_area, 
+                    phl_building_area,
+                    sg_distance_home,
+                    sg_dwell,
+                    sg_workday,
+                    sg_AM_PM,
+                    count_bars_a,
+                    count_rest_a,
+                    count_arts_a,
+                    count_college_a,
+                    count_sports_a,
+                    count_museums_a,
+                    count_amuse_a,
+                    count_hotels_a,
+                    nn_transit,
+                    nn_CenterCity,
+                    nn_parks, 
+                    count_late_tag,
+                    count_barpub_tag,
+                    count_drinks_tag, 
+                    count_cocktail_tag,
+                    demo_pctWhite,
+                    demo_pctBlack, 
+                    demo_pctHisp,
+                    demo_medAge, 
+                    demo_MHI,
+                    demo_medrent))
+
+stargazer(
+  reg1,
+  type = "text",
+  title = "Linear Model Summary Table",
+  dep.var.caption = " ",
+  dep.var.labels = "Model Features")
+```
+
+The model's errors are summarized in the following table. With relatively high Mean Average Percent Error, we have some work to do on the model's accuracy.
+```{r echo=FALSE}
+phl.test <-
+  phl.test %>%
+  st_drop_geometry() %>%
+  mutate(Regression = "Baseline Regression",
+         Visits.Predict = predict(reg1, phl.test),
+         Visits.Error = Visits.Predict - Night_visits,
+         Visits.AbsError = abs(Visits.Predict - Night_visits),
+         Visits.APE = (abs(Visits.Predict - Night_visits)) / Visits.Predict)
+
+ErrorTable <- 
+  phl.test %>% 
+  dplyr::summarize(Regression = "Baseline Regression",
+                   MAE = mean(Visits.AbsError, na.rm = T), 
+                   MAPE = mean(Visits.AbsError, na.rm = T) / mean(Night_visits, na.rm = T)) 
+
+ErrorTable %>% 
+  group_by(Regression) %>%
+  arrange(desc(MAE)) %>% 
+  kable(caption = "MAE and MAPE for Test Set Data") %>% kable_styling()
+```
+
+The following chart compares the predicted values to the actual values for the training and test sets. The predicted value (green line) actually lines up pretty well with the actual value (orange line), but there are some outliers in the data that are contributing to the high MAE and MAPE.
+
+```{r pred actual scatterplot}
+reg1_predict <- predict(reg1, newdata = phl.test)
+
+rmse.train <- caret::MAE(predict(reg1), phl.training$Night_visits)
+rmse.test <- caret::MAE(reg1_predict, phl.test$Night_visits)
+
+preds.train <- data.frame(pred   = predict(reg1),
+                          actual = phl.training$Night_visits,
+                          source = "training data")
+preds.test  <- data.frame(pred   = reg1_predict,
+                          actual = phl.test$Night_visits,
+                          source = "testing data")
+
+preds <- rbind(preds.train, preds.test)
+
+ggplot(preds, aes(x = pred, y = actual, color = source)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "green") +
+  geom_abline(color = "orange") +
+  theme_bw() +
+  facet_wrap(~source, ncol = 1) +
+  labs(title = "Comparing predictions to actual values",
+       x = "Predicted Value",
+       y = "Actual Value",
+       subtitle = "Figure X.X") +
+  theme(
+    legend.position = "none"
+  )
+```
+
+We also test for generalizability with cross validation with the below. The plot shows the Mean Average Error across 100 folds. There are some notable outliers, but most errors seem to be clustered to the left suggesting that the model is relatively generalizable.
+```{r}
+fitControl <- trainControl(method = "cv", 
+                           number = 100,
+                           savePredictions = TRUE)
+
+set.seed(717)
+reg1.cv <- 
+  train(Night_visits ~ ., data = st_drop_geometry(dat_pred_agg) %>% 
+          dplyr::select(Night_visits, 
+                        phl_area, 
+                        phl_building_area,
+                        sg_distance_home,
+                        sg_dwell,
+                        sg_workday,
+                        sg_AM_PM,
+                        count_bars_a,
+                        count_rest_a,
+                        count_arts_a,
+                        count_college_a,
+                        count_sports_a,
+                        count_museums_a,
+                        count_amuse_a,
+                        count_hotels_a,
+                        nn_transit,
+                        nn_CenterCity,
+                        nn_parks, 
+                        count_late_tag,
+                        count_barpub_tag,
+                        count_drinks_tag, 
+                        count_cocktail_tag,
+                        demo_pctWhite,
+                        demo_pctBlack, 
+                        demo_pctHisp,
+                        demo_medAge, 
+                        demo_MHI,
+                        demo_medrent), 
+        method = "lm", 
+        trControl = fitControl, 
+        na.action = na.pass)
+
+reg1.cv.resample <- reg1.cv$resample
+
+reg1.cv 
+ggplot(reg1.cv.resample, aes(x=MAE)) + 
+  geom_histogram(color = "grey40", fill = "#27fdf5", bins = 50) + 
+  labs(title="Histogram of Mean Average Error Across 100 Folds",
+       subtitle = "Figure 5.2") +
+  plotTheme()
+```
+
+Finally, we map the errors by commercial corridor in the following figures. The absolute errors indicate that our model is less accurate predicting nighttime traffic for larger, more heavily-trafficked corridors. The Percent Errors map on the right, actually tells a slightly different story with the highest quintile of percent error along the smaller corridors throughout the city.
+```{r}
+cv_preds <- reg1.cv$pred
+
+map_preds <- dat_pred_agg %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds, by = "rowIndex") %>% 
+  mutate(Visits.AbsError = abs(pred - Night_visits),
+         PercentError = (Visits.AbsError / Night_visits)*100) 
+
+ErrorPlot1 <- ggplot() +
+  geom_sf(data = phl_boundary, fill = "grey40") +
+  geom_sf(data = map_preds, aes(fill = q5(Visits.AbsError)), color = "transparent") +
+  scale_fill_manual(values = palette5,
+                      labels=qBr(map_preds,"Visits.AbsError"),
+                      name="Quintile\nBreaks") +
+  labs(title="Absolute Errors",
+       subtitle = "Night Visit Predictions",
+       caption = "Figure X.X") +
+  mapTheme()
+
+ErrorPlot2 <- ggplot() +
+  geom_sf(data = phl_boundary, fill = "grey40") +
+  geom_sf(data = map_preds, aes(fill = q5(PercentError)), color = "transparent") +
+  scale_fill_manual(values = palette5,
+                      labels=qBr(map_preds, "PercentError"),
+                      name="Quintile\nBreaks") +
+  labs(title="Percent Errors",
+       subtitle = "Night Visit Predictions",
+       caption = "Figure X.X") +
+  mapTheme()
+
+grid.arrange(ErrorPlot1, ErrorPlot2, ncol=2)
+```
+
+Lastly, here we see the percent errors by corridor type. We seem to be best at predicting Type 2 (Neighborhood Centers). We have more trouble predicting Type 1 (Neighborhood Subcenters). There are also some high MAPEs for Types 3 (Community Centers) and 6 (Specialty).
+```{r}
+map_preds %>% 
+  left_join(., st_drop_geometry(phl_corridors_pred), by = "corridor") %>%
+  drop_na(corr_type) %>%
+  st_as_sf() %>%
+  ggplot() +
+  geom_sf(data = phl_boundary, fill = 'grey60', color = "transparent") +
+  geom_sf(aes(fill = q5(PercentError), color = q5(PercentError))) +
+  scale_fill_manual(values = palette5,
+                      labels=qBr(map_preds, "PercentError"),
+                      name="Quintile\nBreaks") +
+    scale_colour_manual(values = palette5,
+                      labels=qBr(map_preds, "PercentError"),
+                      name="Quintile\nBreaks") +
+  labs(title="Percent Errors by Corridor Type",
+       subtitle = "Night Visit Predictions",
+       caption = "Figure X.X") +
+  mapTheme() +
+  facet_wrap(~corr_type)
+```
+
+# 5. Next Steps
+
+For next week, we will primarily focus on preparing our presentation by doing the following:
+
+* Feature Engineering!
