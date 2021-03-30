@@ -148,6 +148,16 @@ hotels.sf <- dat2 %>%
   select(location_name) %>%
   st_as_sf()
 
+septaStops <- 
+  rbind(
+    st_read("https://opendata.arcgis.com/datasets/8c6e2575c8ad46eb887e6bb35825e1a6_0.geojson") %>% 
+      mutate(Line = "El") %>%
+      select(Station, Line),
+    st_read("https://opendata.arcgis.com/datasets/2e9037fd5bef406488ffe5bb67d21312_0.geojson") %>%
+      mutate(Line ="Broad_St") %>%
+      select(Station, Line)) %>%
+  st_transform(st_crs(phl_boundary))
+
 st_c <- st_coordinates
 
 ################
@@ -174,9 +184,7 @@ dat_corr <-
 #   select(top_category, sub_category) %>%
 #   st_drop_geometry()
 # 
-cats %>%
-  filter(top_category == 'Traveler Accomodation') %>%
-  unique()
+
 
 # same_day_brand <-
 #   dat_corr %>%
@@ -203,7 +211,7 @@ cats %>%
 # Amenities
 # Demographic & census data
 # Clustering
-  
+
 dat_corr <-
   dat_corr %>%
   mutate(total = 1,
@@ -281,7 +289,7 @@ corr_test <-
             # arts_nn1 = mean(arts_nn1),\
             count_late_tag = sum(late_night, na.rm = TRUE)/area,
             count_barpub_tag = sum(bar_pub, na.rm = TRUE)/area
-            )
+  )
 
 
 #Safegraph summary variables
@@ -315,4 +323,341 @@ corr_test %>%
   geom_smooth(method = "lm", se=F, colour = "#FA7800") +
   facet_wrap(~variable, ncol = 3, scales = "free") +
   labs(title = "Visits as a function of Nearest Neighbor Variables") +
+  plotTheme()
+
+
+#### PREDICTION WITH LATE HOURS
+dat_hour_unnest <- 
+  dat2 %>% 
+  select(safegraph_place_id, date_range_start, popularity_by_hour) %>%
+  mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
+  unnest(popularity_by_hour) %>%
+  separate(.,
+           popularity_by_hour,
+           c("0", "1", "2", "3", "4", "5", "6", 
+             "7", "8", "9", "10", "11", "12", 
+             "13", "14", "15", "16", "17", "18",
+             "19", "20", "21", "22", "23"),
+           sep = ",") %>%
+  pivot_longer(cols = 3:26,
+               names_to = "Hour",
+               values_to = "Count") %>%
+  mutate(Hour = as.numeric(Hour),
+         Count = as.numeric(Count))
+
+dat2 %>% 
+  select(safegraph_place_id, date_range_start, popularity_by_hour) %>%
+  mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
+  unnest(popularity_by_hour) %>%
+  separate(.,
+           popularity_by_hour,
+           c("0", "1", "2", "3", "4", "5", "6", 
+             "7", "8", "9", "10", "11", "12", 
+             "13", "14", "15", "16", "17", "18",
+             "19", "20", "21", "22", "23"),
+           sep = ",") %>%
+  pivot_longer(cols = 3:26,
+               names_to = "Hour",
+               values_to = "Count") %>%
+  mutate(Hour = as.numeric(Hour),
+         Count = as.numeric(Count))
+
+dat_1_6 <- dat_hour_unnest %>%
+  filter(Hour == "1" | Hour == "2" | Hour == "3" | 
+           Hour == "4" | Hour == "5" |Hour == "6") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs1_6 = sum(Count)) 
+
+dat_7_12 <- dat_hour_unnest %>%
+  filter(Hour == "7" | Hour == "8" | Hour == "9" | 
+           Hour == "10" | Hour == "11" |Hour == "12") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs7_12 = sum(Count)) 
+
+dat_13_18 <- dat_hour_unnest %>%
+  filter(Hour == "13" | Hour == "14" | Hour == "15" | 
+           Hour == "16" | Hour == "17" | Hour == "18") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs13_18 = sum(Count)) 
+
+dat_19_0 <- dat_hour_unnest %>%
+  filter(Hour == "19" | Hour == "20" | Hour == "21" | 
+           Hour == "22" | Hour == "23" | Hour == "0") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs19_0 = sum(Count)) 
+
+dat_workday <- dat_hour_unnest %>%
+  filter(Hour == "9" | Hour == "10" | Hour == "11" | 
+           Hour == "12" | Hour == "13" | Hour == "14" |
+           Hour == "15" | Hour == "16" | Hour == "17" |Hour == "18") %>%
+  group_by(safegraph_place_id, date_range_start) %>%
+  summarize(Hrs_workday = sum(Count))
+
+#Join new dataset
+dat3 <- 
+  dat2 %>% 
+  left_join(dat_1_6, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_7_12, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_13_18, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_19_0, by = c('safegraph_place_id', 'date_range_start')) %>%
+  left_join(dat_workday, by = c('safegraph_place_id', 'date_range_start')) %>%
+  st_join(phl_corridors, join = st_intersects) %>%
+  st_join(phl_nhoods, join = st_intersects) %>%
+  mutate(WorkDay_Evening_Ratio =  Hrs_workday / Hrs19_0)
+
+unique(dat3$top_category)
+
+dat_corr_night <-
+  dat3 %>%
+  mutate(total = 1,
+         bars = ifelse(top_category == 'Drinking Places (Alcoholic Beverages)', 1, 0),
+         restaurant = ifelse(top_category == 'Restaurants and Other Eating Places', 1, 0),
+         arts = ifelse(top_category == 'Promoters of Performing Arts, Sports, and Similar Events' |
+                         top_category == 'Performing Arts Companies', 1, 0),
+         restaurant = ifelse(top_category == 'Restaurants and Other Eating Places', 1, 0),
+         grocery_all = ifelse(top_category == 'Grocery Stores', 1, 0),
+         grocery = ifelse(sub_category == 'Supermarkets and Other Grocery (except Convenience) Stores', 1, 0),
+         malls = ifelse(sub_category == 'Malls', 1, 0),
+         amusement = ifelse(top_category == 'Other Amusement and Recreation Industries', 1, 0),
+         jrcol = ifelse(top_category == 'Junior Colleges', 1, 0),
+         college = ifelse(top_category == 'Colleges, Universities, and Professional Schools', 1, 0),
+         sports = ifelse(top_category == 'Spectator Sports', 1, 0),
+         museum = ifelse(top_category == 'Museums, Historical Sites, and Similar Institutions', 1, 0),
+         hotels = ifelse(top_category == 'Traveler Accommodation', 1, 0),
+         transit_nn = nn_function(st_c(st_centroid(dat3)), st_c(st_centroid(septaStops)), 2),
+         bars_nn = nn_function(st_c(st_centroid(dat3)), st_c(st_centroid(bar.sf)), 4),
+         rest_nn = nn_function(st_c(st_centroid(dat3)), st_c(st_centroid(restaurant.sf)), 4),
+         arts_nn = nn_function(st_c(st_centroid(dat3)), st_c(st_centroid(arts.sf)), 4),
+         college_nn = nn_function(st_c(st_centroid(dat3)), st_c(st_centroid(college.sf)), 1),
+         sports_nn = nn_function(st_c(st_centroid(dat3)), st_c(st_centroid(sports.sf)), 1),
+         hotels_nn = nn_function(st_c(st_centroid(dat3)), st_c(st_centroid(hotels.sf)), 4),
+         casinos_nn = nn_function(st_c(st_centroid(dat3)), st_c(st_centroid(casinos.sf)), 1),
+         late_night = if_else(grepl("Late Night", dat3$category_tags), 1, 0),
+         bar_pub = if_else(grepl("Bar or Pub", dat3$category_tags), 1, 0))
+
+corr_night_test <- 
+  dat_corr_night %>%
+  rename(corr_name = NAME.y,
+         area = Shape__Area) %>%
+  group_by(corr_name, area) %>%
+  summarize(Night_visits = sum(Hrs19_0),
+            Night_log = log(Night_visits),
+            total = sum(total),
+            area = mean(area),
+            sg_visitors = sum(raw_visitor_counts),
+            sg_dwell = mean(median_dwell, na.rm = TRUE),
+            sg_distance_home = mean(distance_from_home, na.rm = TRUE),
+            count_bars_a = sum(bars, na.rm = TRUE)/area,
+            count_rest_a = sum(restaurant, na.rm = TRUE)/area,
+            count_arts_a = sum(arts, na.rm = TRUE)/area,
+            count_jrcol_a = sum(jrcol, na.rm = TRUE)/area,
+            count_college_a = sum(college, na.rm = TRUE)/area,
+            count_sports_a = sum(sports, na.rm = TRUE)/area,
+            count_museums_a = sum(museum, na.rm = TRUE)/area,
+            count_amuse_a = sum(amusement, na.rm = TRUE)/area,
+            count_hotels_a = sum(hotels, na.rm = TRUE)/area,
+            count_bars_t = sum(bars, na.rm = TRUE)/total,
+            count_rest_t = sum(restaurant, na.rm = TRUE)/total,
+            count_arts_t = sum(arts, na.rm = TRUE)/total,
+            count_jrcol_t = sum(jrcol, na.rm = TRUE)/total,
+            count_college_t = sum(college, na.rm = TRUE)/total,
+            count_sports_t = sum(sports, na.rm = TRUE)/total,
+            count_museums_t = sum(museum, na.rm = TRUE)/total,
+            count_amuse_t = sum(amusement, na.rm = TRUE)/total,
+            count_hotels_t = sum(hotels, na.rm = TRUE)/total,
+            log_bars_a = log(sum(bars, na.rm = TRUE)/area),
+            log_rest_a = log(sum(restaurant, na.rm = TRUE)/area),
+            log_arts_a = log(sum(arts, na.rm = TRUE)/area),
+            log_jrcol_a = log(sum(jrcol, na.rm = TRUE)/area),
+            log_college_a = log(sum(college, na.rm = TRUE)/area),
+            log_sports_a = log(sum(sports, na.rm = TRUE)/area),
+            log_museums_a = log(sum(museum, na.rm = TRUE)/area),
+            log_amuse_a = log(sum(amusement, na.rm = TRUE)/area),
+            log_bars_t = log(sum(bars, na.rm = TRUE)/total),
+            log_rest_t = log(sum(restaurant, na.rm = TRUE)/total),
+            log_arts_t = log(sum(arts, na.rm = TRUE)/total),
+            log_jrcol_t = log(sum(jrcol, na.rm = TRUE)/total),
+            log_college_t = log(sum(college, na.rm = TRUE)/total),
+            log_sports_t = log(sum(sports, na.rm = TRUE)/total),
+            log_museums_t = log(sum(museum, na.rm = TRUE)/total),
+            log_amuse_t = log(sum(amusement, na.rm = TRUE)/total),
+            nn_transit = mean(transit_nn),
+            nn_bars = mean(bars_nn),
+            nn_rest = mean(rest_nn),
+            nn_arts = mean(arts_nn),
+            nn_college = mean(college_nn),
+            nn_sports = mean(sports_nn),
+            nn_casinos = mean(casinos_nn),
+            nn_hotels = mean(hotels_nn),
+            count_late_tag = sum(late_night, na.rm = TRUE)/area,
+            count_barpub_tag = sum(bar_pub, na.rm = TRUE)/area
+  )
+
+#Safegraph summary variables
+corr_night_test %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("sg_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_log)) +
+  geom_point(size = .5) + 
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Visits as a function of SafeGraph SUmmary Variables") +
+  plotTheme()
+
+#Count variables
+corr_night_test %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("count_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_log)) +
+  geom_point(size = .5) + 
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 4, scales = "free") +
+  labs(title = "Visits as a function of Continuous Count Variables") +
+  plotTheme()
+
+#Log variables
+corr_night_test %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("log_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_log)) +
+  geom_point(size = .5) + 
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Visits as a function of Continuous Count Variables") +
+  plotTheme()
+
+#NN variables
+corr_night_test %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("nn_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_log)) +
+  geom_point(size = .5) + 
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Visits as a function of Nearest Neighbor Variables") +
+  plotTheme()
+
+unique(dat3$top_category)
+
+#### Presentation Graphic
+dat_corr_night_pres <-
+  dat3 %>%
+  mutate(total = 1,
+         bars = ifelse(top_category == 'Drinking Places (Alcoholic Beverages)', 1, 0),
+         restaurant = ifelse(top_category == 'Restaurants and Other Eating Places', 1, 0),
+         arts = ifelse(top_category == 'Promoters of Performing Arts, Sports, and Similar Events' |
+                         top_category == 'Performing Arts Companies', 1, 0),
+         college = ifelse(top_category == 'Colleges, Universities, and Professional Schools', 1, 0),
+         hotels = ifelse(top_category == 'Traveler Accommodation', 1, 0),
+         casinos = ifelse(top_category == 'Gambling Industries', 1, 0),
+         transit_nn = nn_function(st_c(st_centroid(dat3)), st_c(st_centroid(septaStops)), 2))
+
+corr_night_test_pres <- 
+  dat_corr_night_pres %>%
+  rename(corr_name = NAME.y,
+         area = Shape__Area) %>%
+  group_by(corr_name, area) %>%
+  summarize(Night_visits = sum(Hrs19_0),
+            Night_log = log(Night_visits),
+            area = mean(area),
+            var_distance_home = mean(distance_from_home, na.rm = TRUE),
+            var_bars = sum(bars, na.rm = TRUE)/area,
+            var_restaurants = sum(restaurant, na.rm = TRUE)/area,
+            var_arts = sum(arts, na.rm = TRUE)/area,
+            var_colleges = sum(college, na.rm = TRUE)/area,
+            var_hotels = sum(hotels, na.rm = TRUE)/area,
+            var_casinos = sum(casinos, na.rm = TRUE)/area,
+            var_transit = mean(transit_nn),
+            log_distance = log(mean(distance_from_home, na.rm = TRUE)),
+            log_bars = log(sum(bars, na.rm = TRUE)/area),
+            log_restaurants = log(sum(restaurant, na.rm = TRUE)/area),
+            log_arts = log(sum(arts, na.rm = TRUE)/area),
+            log_colleges = log(sum(college, na.rm = TRUE)/area),
+            log_hotels = log(sum(hotels, na.rm = TRUE)/area),
+            log_casinos = log(sum(casinos, na.rm = TRUE)/area),
+            log_transit = log(mean(transit_nn))
+  )
+
+<-
+  st_drop_geometry(corr_night_test_pres) %>%
+  select(1:4, starts_with("var_")) %>%
+  pivot_longer(., cols = 5:12, names_to = "Variable", values_to = "Value")
+
+correlation.long.log <-
+  st_drop_geometry(corr_night_test_pres) %>%
+  select(1:4, starts_with("log_")) %>%
+  pivot_longer(., cols = 5:12, names_to = "Variable", values_to = "Value")
+
+####
+
+cor.night_visits.var <-
+  correlation.long.var %>%
+  group_by(Variable) %>%
+  summarize(correlation = cor(Value, Night_visits, use = "complete.obs"))
+
+cor.night_log.var <-
+  correlation.long.var %>%
+  group_by(Variable) %>%
+  summarize(correlation = cor(Value, Night_log, use = "complete.obs"))
+
+cor.night_log.log <-
+  correlation.long.log %>%
+  group_by(Variable) %>%
+  summarize(correlation = cor(Value, Night_log, na.rm=TRUE))
+
+###
+
+correlation.long.var %>%
+  ggplot(aes(Value, Night_visits)) +
+  geom_point(size = 0.1) +
+  geom_text(data = cor.night_visits.var, aes(label = paste("r =", round(correlation, 2))),
+            x=-Inf, y=Inf, vjust = 1.5, hjust = -.1) +
+  geom_smooth(method = "lm", se = FALSE, colour = "red") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
+  labs(title = "Nightime Trips as a Function of Variables") +
+  plotTheme()
+
+correlation.long.var %>%
+  ggplot(aes(Value, Night_log)) +
+  geom_point(size = 0.1) +
+  geom_text(data = cor.night_log.var, aes(label = paste("r =", round(correlation, 2))),
+            x=-Inf, y=Inf, vjust = 1.5, hjust = -.1) +
+  geom_smooth(method = "lm", se = FALSE, colour = "red") +
+  facet_wrap(~Variable, ncol = 3, scales = "free") +
+  labs(title = "Log Transformation of Nightime Trips as a Function of Variables") +
+  plotTheme()
+
+
+
+#Night Visits, Untransformed Variables
+corr_night_test_pres %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("var_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_visits)) +
+  geom_point(size = .5) + 
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Night Visits as a function of Variables") +
+  plotTheme()
+
+#Log Night Visits, Untransformed Variables
+corr_night_test_pres %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("var_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_log)) +
+  geom_point(size = .5) + 
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Night Visits as a function of Variables") +
+  plotTheme()
+
+#Log Night Visits, Untransformed Variables
+corr_night_test_pres %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("log_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, Night_log)) +
+  geom_point(size = .5) + 
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Night Visits as a function of Variables") +
   plotTheme()

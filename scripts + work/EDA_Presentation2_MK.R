@@ -294,8 +294,8 @@ phl_corridors %>%
   geom_sf(data = phl_boundary, fill = "grey60", color = "transparent") +
   geom_sf(aes(fill = corr_type), color = "transparent") +
   scale_fill_viridis_d() +
-  # labs(title = "Philadelphia Corridor Typologies", 
-  #      subtitle = "Figure X.X") +
+  labs(title = "Philadelphia Corridor Typologies",
+       subtitle = "Figure X.X") +
   mapTheme() +
   theme(legend.position = "bottom",
         legend.title = element_blank())
@@ -315,7 +315,7 @@ phl_corridors %>%
   summarize(Count = n()) %>%
   ggplot(aes(x="", y=Count, fill=corr_type)) +
   geom_bar(stat = "identity", width = 1, color="white") +
-  coord_polar("y", start = 0) +
+  coord_polar("y", start = 0, direction = -1) +
   scale_fill_viridis_d() +
   # labs(title = "Count of Philadelphia Commercial Corridors") +
   theme_void() + theme(legend.position = "none")
@@ -327,9 +327,9 @@ mutate(contamination = factor(x = contamination,
                               levels = contamination), # ideally you should specify the order explicitly
        label = factor(x = label,
                       levels = label)) %>% # same as above note
-
-#Piechart - Area
-phl_corridors %>%
+  
+  #Piechart - Area
+  phl_corridors %>%
   group_by(corr_type) %>%
   summarize(Area = sum(Shape__Area)) %>%
   ggplot(aes(x="", y=Area, fill=corr_type)) +
@@ -374,11 +374,11 @@ dat3 %>%
                                         "Early_AM")), 
              y=Traffic, 
              x=factor(corr_type, levels=c("6. Speciality Center",
-                                        "5. Superregional Center",
-                                        "4. Regional Center",
-                                        "3. Community Center",
-                                        "2. Neighborhood Center",
-                                        "1. Neighborhood Subcenter")))) + 
+                                          "5. Superregional Center",
+                                          "4. Regional Center",
+                                          "3. Community Center",
+                                          "2. Neighborhood Center",
+                                          "1. Neighborhood Subcenter")))) + 
   geom_bar(position="fill", stat="identity") +
   coord_flip() +
   scale_fill_viridis_d() +
@@ -438,10 +438,11 @@ dat3 %>%
   st_as_sf() %>%
   ggplot() +
   geom_sf(data = phl_boundary, fill = "grey60", color = "transparent") +
-  geom_sf(aes(fill = q5(WorkDay_Evening_Ratio)), color = "transparent") +
-  scale_fill_manual(values = palette5,
-                    aesthetics = c("colour", "fill"),
-                    name = "Workday to Evening Ratio \n(Quintile)") +
+  geom_sf(aes(fill = log(WorkDay_Evening_Ratio)), color = "transparent") +
+  scale_fill_viridis() +
+  # scale_fill_manual(values = palette5,
+  #                   aesthetics = c("colour", "fill"),
+  #                   name = "Workday to Evening Ratio \n(Quintile)") +
   # facet_wrap(~corr_type, ncol = 6) +
   mapTheme() +
   theme(legend.position = "bottom")
@@ -478,10 +479,11 @@ dat3 %>%
   st_as_sf() %>%
   ggplot() +
   geom_sf(data = phl_boundary, fill = "grey60", color = "transparent") +
-  geom_sf(aes(fill = q5(WorkDay_Evening_Ratio)), color = "transparent") +
-  scale_fill_manual(values = palette5,
-                    aesthetics = c("colour", "fill"),
-                    name = "Workday to Evening Ratio \n(Quintile)") +
+  geom_sf(aes(fill = log(WorkDay_Evening_Ratio)), color = "transparent") +
+  scale_fill_viridis() +
+  # scale_fill_manual(values = palette5,
+  #                   aesthetics = c("colour", "fill"),
+  #                   name = "Workday to Evening Ratio \n(Quintile)") +
   # facet_wrap(~corr_type, ncol = 6) +
   mapTheme() +
   theme(legend.position = "bottom")
@@ -774,6 +776,7 @@ cbg_origin <- #takes a really long time!
   left_join(phl_cbg, by = "GEOID10") %>% # join to cbg file
   select(safegraph_place_id, 
          GEOID10, 
+         top_category,
          Visitors,
          NAME,
          corr_type,
@@ -787,6 +790,7 @@ cbg_origin2 <-
   select(safegraph_place_id,
          cbg_origin, 
          Visitors, 
+         top_category,
          corr_type.x,
          NAME,
          geometry_origin, 
@@ -800,6 +804,10 @@ cbg_origin2 <- cbg_origin2 %>%
 cbg_map <-
   cbg_origin2 %>%
   drop_na(distance) %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
+           top_category == "Restaurants and Other Eating Places" |
+           top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
   filter(NAME == "South Street/16th-21st" | #Neighborhood Subcenter
            NAME == "Fairmount/19th-25th" | #Neighborhood Center
            NAME == "Central Waterfront/Washington" | #Community Center
