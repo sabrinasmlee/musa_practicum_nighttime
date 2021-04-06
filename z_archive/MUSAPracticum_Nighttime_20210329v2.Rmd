@@ -88,6 +88,7 @@ library(gganimate)
 library(FNN)
 library(caret)
 library(stargazer)
+library(osmdata)
 
 qBr <- function(df, variable, rnd) {
   if (missing(rnd)) {
@@ -238,7 +239,8 @@ phl_dist_unproj <-
           quiet = TRUE)
 
 #Philadelphia zip codes
-phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson", quiet = TRUE) %>%
+phl_zip <- 
+  st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson", quiet = TRUE) %>%
   st_transform('ESRI:102728') %>%
   mutate(CODE = as.numeric(CODE))
 ```
@@ -1348,15 +1350,25 @@ hotels.sf <- dat2 %>%
   select(location_name) %>%
   st_as_sf()
 
+parking.sf <- dat2 %>%
+  filter(sub_category == "Parking Lots and Garages") %>%
+  select(location_name) %>%
+  st_as_sf()
+
 #Philadelphia Features
 phl_corridors_pred <- phl_corridors %>%
   st_as_sf() %>%
   dplyr::select(4:5,18, 'corr_type') %>%
   rename(., corridor = NAME,
          district = P_DIST,
-         vacancy = VAC_RATE) %>%
-  mutate(corr_area_sqft = as.numeric(st_area(phl_corridors)),
+         vacancy_rate = VAC_RATE) %>%
+  mutate(vacancy_rate = str_remove_all(vacancy_rate, pattern = "%"),
+         vacancy_rate = str_remove_all(vacancy_rate, pattern = "\r\n"),
+         vacancy_rate = as.numeric(vacancy_rate),
+         corr_area_sqft = as.numeric(st_area(phl_corridors)),
          corr_area_sqmi = as.numeric(st_area(phl_corridors)*0.000000035870))
+
+phl_corridors_pred$vacancy_rate <- phl_corridors_pred$vacancy_rate %>% replace_na(0)
 
 phl_dist <-
   st_read("http://data.phl.opendata.arcgis.com/datasets/0960ea0f38f44146bb562f2b212075aa_0.geojson",
@@ -1373,7 +1385,36 @@ CenterCity.sf <- phl_dist %>%
   select(DIST_NAME) %>%
   filter(DIST_NAME == "Central") %>%
   st_centroid()
-  
+
+CityHall.sf <- 
+  dat3 %>% 
+  select(location_name, date_range_start, top_category) %>%
+  filter(location_name == "City Hall", date_range_start == "2018-01-01T05:00:00Z")
+
+ggplot() +
+  geom_sf(data = phl_boundary) +
+  geom_sf(data = CenterCity.sf, color = "blue") +
+  geom_sf(data = CityHall.sf, color = "red")
+
+Temple.sf <- 
+  dat3 %>% 
+  select(location_name, date_range_start, top_category) %>%
+  filter(location_name == "Temple University", 
+         top_category == "Colleges, Universities, and Professional Schools",
+         date_range_start == "2018-01-01T05:00:00Z")
+
+UPenn.sf <- 
+  dat3 %>% 
+  select(location_name, date_range_start, top_category) %>%
+  filter(location_name == "Univ of Penn",
+         top_category == "Colleges, Universities, and Professional Schools",
+         date_range_start == "2018-01-01T05:00:00Z")
+
+ggplot() +
+  geom_sf(data = phl_boundary) +
+  geom_sf(data = Temple.sf, color = "blue") +
+  geom_sf(data = UPenn.sf, color = "red")
+
 septaStops <- 
   rbind(
     st_read("https://opendata.arcgis.com/datasets/8c6e2575c8ad46eb887e6bb35825e1a6_0.geojson", quiet = TRUE) %>% 
@@ -1429,21 +1470,50 @@ phl_blockgroups <-
   mutate(pctWhite = ((White / TotalPop)*100),
          pctBlack = ((Black / TotalPop)*100),
          pctHisp = ((Hisp / TotalPop)*100),
-         Context_Race = ifelse(pctWhite > .5, "Majority White", "Majority Non-White"),
-         Context_Income = ifelse(MedHHInc > 46116, "High Income", "Low Income"),
-         Context_Age = ifelse(MedAge > 34.5, "High Median Age", "Low Median Age"),
-         Context_Rent = ifelse(MedRent > 1032, "High Median Rent", "Low Median Rent")) %>%
+         tract_area_mi = as.numeric(st_area(geometry)*0.000000035870),
+         popdens_mi = TotalPop / tract_area_mi
+         # Context_Race = ifelse(pctWhite > .5, "Majority White", "Majority Non-White"),
+         # Context_Income = ifelse(MedHHInc > 46116, "High Income", "Low Income"),
+         # Context_Age = ifelse(MedAge > 34.5, "High Median Age", "Low Median Age"),
+         # Context_Rent = ifelse(MedRent > 1032, "High Median Rent", "Low Median Rent")
+         ) %>%
   st_as_sf()
 
 #Join demographic data to dat2
-dat2 <- st_join(dat2 %>% st_transform(crs=4326),
-                phl_blockgroups %>%
-                  st_transform(crs=4326),
-                join=st_intersects, 
-                left = TRUE) %>%
-  st_transform('ESRI:102728')
+# dat2 <- st_join(dat2 %>% st_transform(crs=4326),
+#                 phl_blockgroups %>%
+#                   st_transform(crs=4326),
+#                 join=st_intersects, 
+#                 left = TRUE) %>%
+#   st_transform('ESRI:102728')
 
 st_c <- st_coordinates
+```
+
+We are also pulling parking data from Open Street Map (OSM). We decided to use OSM instead of the Safegraph dataset, because this shows surface parking lots in addition to garages, which are largely clustered in Center City and likely collinear with our other features.
+```{r OSM}
+xmin = st_bbox(PHL_boundary_unproj)[[1]]
+ymin = st_bbox(PHL_boundary_unproj)[[2]]
+xmax = st_bbox(PHL_boundary_unproj)[[3]]
+ymax = st_bbox(PHL_boundary_unproj)[[4]]
+
+parking <- opq(bbox = c(xmin, ymin, xmax, ymax)) %>%
+  add_osm_feature(key = 'amenity', value = c("parking")) %>%
+  osmdata_sf()
+parking <-
+  parking$osm_polygons %>%
+  .[PHL_boundary_unproj,]
+
+parking.sf <- parking %>%
+  dplyr::select(geometry) %>%
+  na.omit() %>%
+  st_transform(st_crs(phl_boundary)) %>%
+  st_centroid()
+
+ggplot() +
+  geom_sf(data = phl_boundary) +
+  geom_sf(data = parking.sf, color = "red") +
+  mapTheme()
 ```
 
 ## Feature Engineering
@@ -1456,6 +1526,7 @@ dat_pred_temp <-
   left_join(dat_13_18, by = c('safegraph_place_id', 'date_range_start')) %>%
   left_join(dat_19_0, by = c('safegraph_place_id', 'date_range_start')) %>%
   left_join(dat_workday, by = c('safegraph_place_id', 'date_range_start')) %>%
+  st_join(phl_blockgroups) %>%
   st_join(phl_nhoods) %>%
   st_join(phl_corridors_pred) %>%
   st_join(., phl_building_footprints) %>%
@@ -1469,6 +1540,7 @@ We also review the share of certain business types and characteristics along a s
 Finally, this code generates nearest neighbor variables for business by corridor.
 ```{r Observe correlations}
 #Engineer variables at the destination level.
+# unique(dat_pred_temp$top_category)
 dat_pred <-
   dat_pred_temp %>%
   mutate(total = 1,
@@ -1477,11 +1549,13 @@ dat_pred <-
          arts = ifelse(top_category == 'Promoters of Performing Arts, Sports, and Similar Events' |
                          top_category == 'Performing Arts Companies', 1, 0),
          restaurant = ifelse(top_category == 'Restaurants and Other Eating Places', 1, 0),
-         grocery_all = ifelse(top_category == 'Grocery Stores', 1, 0),
-         grocery = ifelse(sub_category == 'Supermarkets and Other Grocery (except Convenience) Stores', 1, 0),
-         malls = ifelse(sub_category == 'Malls', 1, 0),
+         grocery = ifelse(top_category == 'Grocery Stores', 1, 0),
+         childcare = ifelse(top_category == "Child Day Care Services", 1, 0),
+         gas = ifelse(top_category == "Gasoline Stations", 1, 0),
+         religious = ifelse(top_category == "Religious Organization", 1, 0),
+         personal = ifelse(top_category == "Personal Care Services", 1, 0),
+         liquor = ifelse(top_category == "Beer, Wine, and Liquor Stores", 1, 0),
          amusement = ifelse(top_category == 'Other Amusement and Recreation Industries', 1, 0),
-         jrcol = ifelse(top_category == 'Junior Colleges', 1, 0),
          college = ifelse(top_category == 'Colleges, Universities, and Professional Schools', 1, 0),
          sports = ifelse(top_category == 'Spectator Sports', 1, 0),
          museum = ifelse(top_category == 'Museums, Historical Sites, and Similar Institutions', 1, 0),
@@ -1495,6 +1569,7 @@ dat_pred <-
          hotels_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(hotels.sf)), 4),
          casinos_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(casinos.sf)), 1),
          parks_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(parks)), 4),
+         parking_nn = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(parking.sf)), 1),
          late_night = if_else(grepl("Late Night", dat_pred_temp$category_tags), 1, 0),
          bar_pub = if_else(grepl("Bar or Pub", dat_pred_temp$category_tags), 1, 0),
          drinks = if_else(grepl("Drinks", dat_pred_temp$category_tags), 1, 0),
@@ -1504,62 +1579,78 @@ dat_pred <-
          NavyYard = if_else(neighborhood == "Navy Yard", 1, 0),
          PM_Workday = Hrs19_0 / Hrs_workday,
          AM_PM = (Hrs1_6 + Hrs7_12) / (Hrs13_18+Hrs19_0),
-         Center_City = nn_function(st_c(st_centroid(dat_pred_temp)), st_c(st_centroid(CenterCity.sf)), 1))%>%
-  mutate_if(is.numeric, list(~na_if(., Inf)))
+         restaurant_sqft = ifelse(top_category == "Restaurants and Other Eating Places", bld_area_sqft, 0),
+         bars_sqft = ifelse(top_category == "Drinking Places (Alcoholic Beverages)", bld_area_sqft, 0))
+
+dat_pred$CenterCity <- as.numeric(st_distance(dat_pred, CenterCity.sf))
+dat_pred$CityHall <- as.numeric(st_distance(dat_pred, CityHall.sf))
+dat_pred$Temple <- as.numeric(st_distance(dat_pred, Temple.sf))
+dat_pred$UPenn <- as.numeric(st_distance(dat_pred, UPenn.sf))
 
 #Aggregating by corridor
+colnames(dat_pred)
 dat_pred_agg <- 
   dat_pred %>%
-  group_by(corridor) %>%
+  group_by(corridor, date_range_start, corr_type) %>%
   summarize(Night_visits = sum(Hrs19_0),
             phl_area_sqmi = mean(corr_area_sqmi, na.rm = TRUE),
-            Night_visits_sqmi = Night_visits / phl_area_sqmi,
+            Night_visits_sqmi = (Night_visits + 1) / phl_area_sqmi,
             Night_visits_sqmi_log = log(Night_visits_sqmi),
             total = sum(total),
-            phl_building_area = mean(bld_area_sqft, na.rm = TRUE),
-            sg_visitors = sum(raw_visitor_counts),
-            sg_visits = sum(raw_visit_counts),
+            phl_building_size = mean(bld_area_sqft +1, na.rm = TRUE),
+            phl_building_size_log = log(phl_building_size),
+            phl_building_size_med = median(bld_area_sqft, na.rm = TRUE),
+            phl_CenterCity = mean(CenterCity),
+            phl_CityHall = mean(CityHall),
+            phl_Temple = mean(Temple),
+            phl_UPenn = mean(UPenn),
+            phl_vacrate = mean(vacancy_rate + 1),
+            phl_vacrate_log = log(phl_vacrate),
+            phl_rest_sqft = mean(restaurant_sqft > 0),
+            phl_rest_sqft_log = log(phl_rest_sqft),
+            phl_bar_sqft = mean(bars_sqft > 0),
+            phl_bar_sqft_log = log(phl_bar_sqft),
+            # sg_visitors = sum(raw_visitor_counts),
+            # sg_visits = sum(raw_visit_counts),
             sg_dwell = mean(median_dwell, na.rm = TRUE),
             sg_distance_home = mean(distance_from_home, na.rm = TRUE),
-            sg_workday = mean(PM_Workday, na.rm = TRUE),
-            sg_AM_PM = mean(AM_PM, na.rm = TRUE),
-            count_bars_a = sum(bars, na.rm = TRUE)/phl_area_sqmi,
-            count_rest_a = sum(restaurant, na.rm = TRUE)/phl_area_sqmi,
-            count_arts_a = sum(arts, na.rm = TRUE)/phl_area_sqmi,
+            # sg_workday = mean(PM_Workday, na.rm = TRUE),
+            # sg_AM_PM = mean(AM_PM, na.rm = TRUE),
+            sg_distance_home_log = log(sg_distance_home),
+            count_bars_a = (sum(bars, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_rest_a = (sum(restaurant, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_arts_a = (sum(arts, na.rm = TRUE) +1)/phl_area_sqmi,
             # count_jrcol_a = sum(jrcol, na.rm = TRUE)/phl_area_sqmi,
-            count_college_a = sum(college, na.rm = TRUE)/phl_area_sqmi,
-            count_sports_a = sum(sports, na.rm = TRUE)/phl_area_sqmi,
-            count_museums_a = sum(museum, na.rm = TRUE)/phl_area_sqmi,
-            count_amuse_a = sum(amusement, na.rm = TRUE)/phl_area_sqmi,
-            count_hotels_a = sum(hotels, na.rm = TRUE)/phl_area_sqmi,
-            # count_bars_t = sum(bars, na.rm = TRUE)/total,
-            # count_rest_t = sum(restaurant, na.rm = TRUE)/total,
-            # count_arts_t = sum(arts, na.rm = TRUE)/total,
-            # count_jrcol_t = sum(jrcol, na.rm = TRUE)/total,
-            # count_college_t = sum(college, na.rm = TRUE)/total,
-            # count_sports_t = sum(sports, na.rm = TRUE)/total,
-            # count_museums_t = sum(museum, na.rm = TRUE)/total,
-            # count_amuse_t = sum(amusement, na.rm = TRUE)/total,
-            # count_hotels_t = sum(hotels, na.rm = TRUE)/total,
-            # log_bars_a = log(sum(bars, na.rm = TRUE)/phl_area_sqmi),
-            # log_rest_a = log(sum(restaurant, na.rm = TRUE)/phl_area_sqmi),
-            # log_arts_a = log(sum(arts, na.rm = TRUE)/phl_area_sqmi),
+            count_college_a = (sum(college, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_sports_a = (sum(sports, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_museums_a = (sum(museum, na.rm = TRUE)  + 1)/phl_area_sqmi,
+            count_amuse_a = (sum(amusement, na.rm = TRUE)  + 1)/phl_area_sqmi,
+            count_hotels_a = (sum(hotels, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_grocery_a = (sum(grocery, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_childcare_a = (sum(childcare, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_gas_a = (sum(gas, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_religious_a = (sum(religious, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_personal_a = (sum(personal, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_late_tag = (sum(late_night, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_barpub_tag = (sum(bar_pub, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_drinks_tag = (sum(drinks, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_cocktail_tag = (sum(cocktail, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_bars_a_log = log(count_bars_a),
+            count_rest_a_log = log(count_rest_a),
+            count_arts_a_log = log(count_arts_a),
+            count_grocery_a_log = log(count_grocery_a),
+            count_religious_a_log = log(count_religious_a),
+            count_childcare_a_log = log(count_childcare_a),
             # log_jrcol_a = log(sum(jrcol, na.rm = TRUE)/phl_area_sqmi),
             # log_college_a = log(sum(college, na.rm = TRUE)/phl_area_sqmi),
             # log_sports_a = log(sum(sports, na.rm = TRUE)/phl_area_sqmi),
             # log_museums_a = log(sum(museum, na.rm = TRUE)/phl_area_sqmi),
-            # log_amuse_a = log(sum(amusement, na.rm = TRUE)/phl_area_sqmi),
-            # log_bars_t = log(sum(bars, na.rm = TRUE)/total),
-            # log_rest_t = log(sum(restaurant, na.rm = TRUE)/total),
-            # log_arts_t = log(sum(arts, na.rm = TRUE)/total),
-            # log_jrcol_t = log(sum(jrcol, na.rm = TRUE)/total),
-            # log_college_t = log(sum(college, na.rm = TRUE)/total),
-            # log_sports_t = log(sum(sports, na.rm = TRUE)/total),
-            # log_museums_t = log(sum(museum, na.rm = TRUE)/total),
-            # log_amuse_t = log(sum(amusement, na.rm = TRUE)/total),
+            count_amuse_a_log = log(count_amuse_a),
+            count_barpub_log = log(count_barpub_tag),
+            count_late_log = log(count_late_tag),
             nn_transit = mean(transit_nn),
-            nn_CenterCity = mean(Center_City),
             nn_parks = mean(parks_nn),
+            nn_parking = mean(parking_nn),
             # nn_bars = mean(bars_nn),
             # nn_rest = mean(rest_nn),
             # nn_arts = mean(arts_nn),
@@ -1567,21 +1658,25 @@ dat_pred_agg <-
             # nn_sports = mean(sports_nn),
             # nn_casinos = mean(casinos_nn),
             # nn_hotels = mean(hotels_nn),
-            count_late_tag = sum(late_night, na.rm = TRUE)/phl_area_sqmi,
-            count_barpub_tag = sum(bar_pub, na.rm = TRUE)/phl_area_sqmi,
-            count_drinks_tag = sum(drinks, na.rm = TRUE)/phl_area_sqmi,
-            count_cocktail_tag = sum(cocktail, na.rm = TRUE)/phl_area_sqmi,
-            demo_pctWhite = mean(pctWhite, na.rm = TRUE),
-            demo_pctBlack = mean(pctBlack, na.rm = TRUE),
-            demo_pctHisp = mean(pctHisp, na.rm = TRUE),
-            demo_medAge = mean(MedAge, na.rm = TRUE),
-            demo_MHI = median(MedHHInc, na.rm = TRUE),
-            demo_medrent = median(MedRent, na.rm = TRUE)) %>% 
+            nn_parks_log = log(nn_parks),
+            nn_transit_log = log(nn_transit),
+            nn_parking_log = log(nn_parking),
+            demo_popdens = mean(popdens_mi),
+            demo_popdens_log = log(demo_popdens),
+            demo_pctWhite = weighted.mean(pctWhite, Hrs19_0, na.rm = TRUE),
+            demo_pctBlack = weighted.mean(pctBlack, Hrs19_0, na.rm = TRUE),
+            demo_pctHisp = weighted.mean(pctHisp, Hrs19_0, na.rm = TRUE),
+            demo_medAge = weighted.mean(MedAge, Hrs19_0, na.rm = TRUE),
+            demo_MHI = weighted.mean(MedHHInc, Hrs19_0, na.rm = TRUE),
+            demo_medrent = weighted.mean(MedRent, Hrs19_0, na.rm = TRUE),
+            demo_pctHisp_log = log(demo_pctHisp + 1)) %>% 
   mutate_if(is.numeric, list(~na_if(., Inf))) %>%
   st_drop_geometry() %>%
-  left_join(phl_corridors_pred %>% select(corridor)) %>% 
+  left_join(phl_corridors_pred %>% select(corridor)) %>%
   drop_na(corridor, demo_MHI, demo_medrent) %>% #Some of the census variables aren't reporting for our block groups
-  st_as_sf() 
+  st_as_sf() %>%
+  ungroup() %>%
+  na.omit(st_distance_home)
 ```
 
 ## Plots
@@ -1613,6 +1708,17 @@ dat_pred_agg %>%
   labs(title = "Nighttime Visits as a function of Philadelphia Summary Variables",
        subtitle = "Figure X.X") +
   plotTheme()
+
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  select(starts_with("phl_")) %>%
+  pivot_longer(., cols = starts_with("phl_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value)) +
+  geom_histogram() +
+  labs(title = "Philadephia Variable distribution",
+       subtitle = "Figure X.X") + 
+  facet_wrap(~variable, scales = "free") + 
+  plotTheme()
 ```
 
 Next, we observe that of the SafeGraph summary variables, the distnace from home has a strong relationship with total visits. The count of visitors also demonstrates a strong relationship, but this is likely collinear with the the number of visits.
@@ -1628,6 +1734,16 @@ dat_pred_agg %>%
   labs(title = "Nighttime Visits as a function of Gobal SafeGraph Summary Variables",
        subtitle = "Figure X.X") +
   plotTheme()
+
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("sg_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value)) +
+  geom_histogram() +
+  labs(title = "SafeGraph Summary Variable Distribution",
+       subtitle = "Figure X.X") + 
+  facet_wrap(~variable, scales = "free") + 
+  plotTheme()
 ```
 
 The next set of plots show the relationship between the share a specific business type by corridor and the number of trips. There seems to be a relationship with businesses that could be classified as anchor institutions, such as colleges and museums, and the number of trips. These corrplots also look at businesses with a specific tag, such as a "late night" or "bar and pub". 
@@ -1635,13 +1751,95 @@ The next set of plots show the relationship between the share a specific busines
 #Count variables
 dat_pred_agg %>%
   st_drop_geometry() %>%
-  pivot_longer(., cols = starts_with("count_"), names_to = "variable", values_to="value") %>%
+  pivot_longer(., cols = c(ends_with("a_log")), names_to = "variable", values_to="value") %>%
   ggplot(aes(value, Night_visits_sqmi_log)) +
   geom_point(size = .5) +
   geom_smooth(method = "lm", se=F, colour = "#FA7800") +
-  facet_wrap(~variable, ncol = 3, scales = "free") +
+  facet_wrap(~variable, ncol = 4, scales = "free") +
   labs(title = "Nighttime Visits as a function of Normalized Count Variables",
        subtitle = "Figure X.X") +
+  plotTheme()
+# 
+# colnames(dat_pred)
+# 
+# dat_pred$date_range_start
+
+# cat_agg <- dat_pred %>%
+#   filter(date_range_start == "2018-01-01T05:00:00Z") %>%
+#   select(corridor, top_category, Hrs19_0, corr_area_sqmi) %>%
+#   group_by(corridor, top_category) %>%
+#   summarize(night_visits = sum(Hrs19_0),
+#             corr_area_sqmi = mean(corr_area_sqmi),
+#             night_visits_sqmi = night_visits / corr_area_sqmi,
+#             nigh_visits_sqmi_log = log(night_visits_sqmi),
+#             bus_count = n(),
+#             bus_count_a = bus_count + 1 / corr_area_sqmi,
+#             bus_count_a_log = log(bus_count_a)) %>%
+#   st_drop_geometry()
+# 
+# # cat_agg_long <- cat_agg %>%
+# #   pivot_longer(., cols = c("Night_visits", "Bus_count"),
+# #                names_to = "variable",
+# #                values_to = "value") %>%
+# #   select(corridor, top_category, variable, value)
+# 
+# categories <- unique(cat_agg$top_category)
+# 
+# cat_1 <- categories[1:25]
+# cat_2 <- categories[26:50]
+# cat_3 <- categories[51:75]
+# cat_4 <- categories[76:100]
+# cat_5 <- categories[101:127]
+# 
+# cat_agg %>%
+#   filter(top_category %in% cat_1) %>%
+#   ggplot(aes(bus_count_a_log, nigh_visits_sqmi_log)) +
+#   geom_point(size = .5) +
+#   geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+#   facet_wrap(~top_category, scales = "free_y") +
+#   plotTheme()
+# 
+# cat_agg %>%
+#   filter(top_category %in% cat_2) %>%
+#   ggplot(aes(bus_count_a_log, nigh_visits_sqmi_log)) +
+#   geom_point(size = .5) +
+#   geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+#   facet_wrap(~top_category, scales = "free_y") +
+#   plotTheme()
+# 
+# cat_agg %>%
+#   filter(top_category %in% cat_3) %>%
+#   ggplot(aes(bus_count_a_log, nigh_visits_sqmi_log)) +
+#   geom_point(size = .5) +
+#   geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+#   facet_wrap(~top_category, scales = "free_y") +
+#   plotTheme()
+# 
+# cat_agg %>%
+#   filter(top_category %in% cat_4) %>%
+#   ggplot(aes(bus_count_a_log, nigh_visits_sqmi_log)) +
+#   geom_point(size = .5) +
+#   geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+#   facet_wrap(~top_category, scales = "free_y") +
+#   plotTheme()
+# 
+# cat_agg %>%
+#   filter(top_category %in% cat_5) %>%
+#   ggplot(aes(bus_count_a_log, nigh_visits_sqmi_log)) +
+#   geom_point(size = .5) +
+#   geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+#   facet_wrap(~top_category, scales = "free_y") +
+#   plotTheme()
+
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  select(starts_with("count_")) %>%
+  pivot_longer(., cols = starts_with("count_"), names_to = ,"variable", values_to="value") %>%
+  ggplot(aes(value)) +
+  geom_histogram() +
+  labs(title = "Count Variable Distribution",
+       subtitle = "Figure X.X") + 
+  facet_wrap(~variable, scales = "free", ncol = 4) + 
   plotTheme()
 ```
 
@@ -1658,6 +1856,17 @@ dat_pred_agg %>%
   labs(title = "Nighttime Visits as a function of Nearest Neighbor Variables",
        subtitle = "Figure X.X") +
   plotTheme()
+
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  select(starts_with("nn_")) %>%
+  pivot_longer(., cols = starts_with("nn_"), names_to = ,"variable", values_to="value") %>%
+  ggplot(aes(value)) +
+  geom_histogram() +
+  labs(title = "NN Variable Distribution",
+       subtitle = "Figure X.X") + 
+  facet_wrap(~variable, scales = "free") + 
+  plotTheme()
 ```
 
 Finally, we created demographic variables from census data. We pulled census information, joined it to the individual destinations and then aggregated the variables by commercial corridor. The median rent variable appears to have the strongest relationship with the depedent nighttime traffic variable.
@@ -1673,58 +1882,267 @@ dat_pred_agg %>%
   labs(title = "Nighttime Visits as a function of Demographic Variables",
        subtitle = "Figure X.X") +
   plotTheme()
+
+dat_pred_agg %>%
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("demo_"), names_to = ,"variable", values_to="value") %>%
+  ggplot(aes(value)) +
+  geom_histogram() +
+  labs(title = "NN Variable Distribution",
+       subtitle = "Figure X.X") + 
+  facet_wrap(~variable, scales = "free") + 
+  plotTheme()
 ```
 
 ## Model & Cross Validation
 
 Using the features we engineered above, we split our data into a training and test set and run a linear regression model in the following code block. The results of the regression are shown below.
 ```{r model building}
+#Removing outliers
+dat_pred_agg <- dat_pred_agg %>% filter(Night_visits_sqmi < 900000)
+
+# summary(dat_pred_agg$Night_visits_sqmi)
+# boxplot(dat_pred_agg$Night_visits_sqmi)
+# hist(dat_pred_agg$Night_visits_sqmi)
+# 
+# summary(dat_pred_agg$Night_visits_sqmi_log)
+# boxplot(dat_pred_agg$Night_visits_sqmi_log)
+
 #Setting up test and training datasets
-inTrain <- createDataPartition(y=dat_pred_agg$Night_visits_sqmi_log,
-                               p = .60, list = FALSE)
-#Is there a way to have the same data partition each time?
+set.seed(414)
+inTrain <- createDataPartition(y=dat_pred_agg$Night_visits_sqmi_log, p = .60, list = FALSE)
 
-phl.training <- dat_pred_agg[inTrain,] 
-phl.test <- dat_pred_agg[-inTrain,]  
+phl.training <- dat_pred_agg[inTrain,]
+phl.test <- dat_pred_agg[-inTrain,]
 
-# new_dat <- st_drop_geometry(phl.training)
-# new_dat$Night_visits <- xx
-# new_dat <- dplyr::select(new_dat, -phl_area)
+colnames(dat_pred_agg)
 
 #Multivariate regression
-reg1 <- lm(Night_visits_sqmi_log ~ ., data = st_drop_geometry(phl.training) %>%
+reg1 <- 
+  lm(Night_visits_sqmi_log ~ ., 
+     data = st_drop_geometry(phl.training) %>%
 # reg1 <- lm(Night_visits ~ ., data = new_dat %>% 
              select(Night_visits_sqmi_log, 
-                    # phl_area, 
-                    phl_building_area,
-                    sg_distance_home,
+                    phl_building_size_log,
+                    # phl_UPenn,
+                    phl_Temple,
+                    # phl_CityHall,
+                    phl_rest_sqft_log,
+                    phl_bar_sqft_log,
+                    phl_vacrate_log,
+                    # phl_CenterCity,
+                    # sg_distance_home_log,
                     sg_dwell,
-                    sg_workday,
-                    sg_AM_PM,
-                    count_bars_a,
-                    count_rest_a,
-                    count_arts_a,
-                    count_college_a,
-                    count_sports_a,
-                    count_museums_a,
-                    count_amuse_a,
-                    count_hotels_a,
-                    nn_transit,
-                    nn_CenterCity,
-                    nn_parks, 
-                    count_late_tag,
-                    count_barpub_tag,
-                    count_drinks_tag, 
-                    count_cocktail_tag,
+                    count_bars_a_log,
+                    count_rest_a_log,
+                    count_arts_a_log,
+                    count_grocery_a_log,
+                    # count_childcare_a_log,
+                    # count_religious_a_log,
+                    # count_bars_a,
+                    # count_rest_a,
+                    # count_arts_a,
+                    # count_college_a,
+                    # count_sports_a,
+                    # count_museums_a,
+                    # count_amuse_a_log,
+                    # count_hotels_a,
+                    nn_transit_log,
+                    # nn_parking_log,
+                    nn_parks_log,
+                    # count_late_tag,
+                    # count_barpub_tag,
+                    corr_type,
+                    count_late_log,
+                    # count_barpub_log,
                     demo_pctWhite,
-                    demo_pctBlack, 
-                    demo_pctHisp,
-                    demo_medAge, 
-                    demo_MHI,
-                    demo_medrent))
+                    # demo_pctBlack, 
+                    # demo_pctHisp_log,
+                    # demo_medAge,
+                    # demo_popdens,
+                    # demo_popdens_log,
+                    demo_medrent,
+                    demo_MHI)
+)
+
+zsummary(reg1)
 
 stargazer(
   reg1,
+  type = "text",
+  title = "Linear Model Summary Table",
+  dep.var.caption = " ",
+  dep.var.labels = "Model Features")
+```
+
+```{r model building}
+#Removing outliers
+# dat_pred_agg <- dat_pred_agg %>% filter(Night_visits_sqmi < 600000)
+# 
+# summary(dat_pred_agg$Night_visits_sqmi)
+# boxplot(dat_pred_agg$Night_visits_sqmi)
+# hist(dat_pred_agg$Night_visits_sqmi)
+# 
+# summary(dat_pred_agg$Night_visits_sqmi_log)
+# boxplot(dat_pred_agg$Night_visits_sqmi_log)
+# 
+# #Setting up test and training datasets
+# set.seed(414)
+# inTrain <- createDataPartition(y=dat_pred_agg$Night_visits_sqmi_log, p = .60, list = FALSE)
+# 
+# phl.training <- dat_pred_agg[inTrain,]
+# phl.test <- dat_pred_agg[-inTrain,]
+# 
+# colnames(dat_pred_agg)
+# unique(phl.training$corr_type)
+
+#Multivariate regression
+reg_nhoodsub <- 
+  lm(Night_visits_sqmi_log ~ ., 
+     data = st_drop_geometry(phl.training %>%
+                               filter(corr_type == "1. Neighborhood Subcenter")) %>%
+             select(Night_visits_sqmi_log, 
+                    phl_building_size_log,
+                    phl_UPenn,
+                    phl_Temple,
+                    phl_CityHall,
+                    sg_distance_home_log,
+                    sg_dwell,
+                    count_bars_a_log,
+                    count_rest_a_log,
+                    count_arts_a_log,
+                    count_grocery_a_log,
+                    nn_transit_log,
+                    nn_parking_log,
+                    nn_parks_log,
+                    count_late_log,
+                    demo_pctWhite,
+                    demo_popdens_log,
+                    demo_medrent,
+                    demo_MHI))
+
+reg_nhoodcent <- 
+  lm(Night_visits_sqmi_log ~ ., 
+     data = st_drop_geometry(phl.training %>%
+                               filter(corr_type == "2. Neighborhood Center")) %>%
+             select(Night_visits_sqmi_log, 
+                    phl_building_size_log,
+                    phl_UPenn,
+                    phl_Temple,
+                    phl_CityHall,
+                    sg_distance_home_log,
+                    sg_dwell,
+                    count_bars_a_log,
+                    count_rest_a_log,
+                    count_arts_a_log,
+                    count_grocery_a_log,
+                    nn_transit_log,
+                    nn_parking_log,
+                    nn_parks_log,
+                    count_late_log,
+                    demo_pctWhite,
+                    demo_popdens_log,
+                    demo_medrent,
+                    demo_MHI))
+
+reg_commcent <- 
+  lm(Night_visits_sqmi_log ~ ., 
+     data = st_drop_geometry(phl.training %>%
+                               filter(corr_type == "3. Community Center")) %>%
+             select(Night_visits_sqmi_log, 
+                    phl_building_size_log,
+                    phl_UPenn,
+                    phl_Temple,
+                    phl_CityHall,
+                    sg_distance_home_log,
+                    sg_dwell,
+                    count_bars_a_log,
+                    count_rest_a_log,
+                    count_arts_a_log,
+                    count_grocery_a_log,
+                    nn_transit_log,
+                    nn_parking_log,
+                    nn_parks_log,
+                    count_late_log,
+                    demo_pctWhite,
+                    demo_popdens_log,
+                    demo_medrent,
+                    demo_MHI))
+
+reg_regcenter <- 
+  lm(Night_visits_sqmi_log ~ ., 
+     data = st_drop_geometry(phl.training %>%
+                               filter(corr_type == "4. Regional Center")) %>%
+             select(Night_visits_sqmi_log, 
+                    phl_building_size_log,
+                    phl_UPenn,
+                    phl_Temple,
+                    phl_CityHall,
+                    sg_distance_home_log,
+                    sg_dwell,
+                    count_bars_a_log,
+                    count_rest_a_log,
+                    count_arts_a_log,
+                    count_grocery_a_log,
+                    nn_transit_log,
+                    nn_parking_log,
+                    nn_parks_log,
+                    count_late_log,
+                    demo_pctWhite,
+                    demo_popdens_log,
+                    demo_medrent,
+                    demo_MHI))
+
+reg_supreg <- 
+  lm(Night_visits_sqmi_log ~ ., 
+     data = st_drop_geometry(phl.training %>%
+                               filter(corr_type == "5. Superregional Center")) %>%
+             select(Night_visits_sqmi_log, 
+                    phl_building_size_log,
+                    phl_UPenn,
+                    phl_Temple,
+                    phl_CityHall,
+                    sg_distance_home_log,
+                    sg_dwell,
+                    count_bars_a_log,
+                    count_rest_a_log,
+                    count_arts_a_log,
+                    count_grocery_a_log,
+                    nn_transit_log,
+                    nn_parking_log,
+                    nn_parks_log,
+                    count_late_log,
+                    demo_pctWhite,
+                    demo_popdens_log,
+                    demo_medrent,
+                    demo_MHI))
+
+reg_specialty <- 
+  lm(Night_visits_sqmi_log ~ ., 
+     data = st_drop_geometry(phl.training %>%
+                               filter(corr_type == "6. Speciality Center")) %>%
+             select(Night_visits_sqmi_log, 
+                    phl_building_size_log,
+                    phl_UPenn,
+                    phl_Temple,
+                    phl_CityHall,
+                    sg_distance_home_log,
+                    sg_dwell,
+                    count_bars_a_log,
+                    count_rest_a_log,
+                    count_arts_a_log,
+                    count_grocery_a_log,
+                    nn_transit_log,
+                    nn_parking_log,
+                    nn_parks_log,
+                    count_late_log,
+                    demo_pctWhite,
+                    demo_popdens_log,
+                    demo_medrent,
+                    demo_MHI))
+
+stargazer(
+  reg1, reg_nhoodsub, reg_nhoodcent, reg_commcent, reg_regcenter, reg_supreg, reg_specialty,
   type = "text",
   title = "Linear Model Summary Table",
   dep.var.caption = " ",
@@ -1737,10 +2155,9 @@ The model's errors are summarized in the following table. With relatively high M
 ```{r}
 phl.test <-
   phl.test %>%
-  # st_drop_geometry() %>%
+  st_drop_geometry() %>%
   mutate(Regression = "Baseline Regression",
          Visits.Predict = exp(predict(reg1, phl.test)),
-         # Visits.Predict = predict(reg1, phl.test),
          Visits.Error = Visits.Predict - Night_visits_sqmi,
          Visits.AbsError = abs(Visits.Predict - Night_visits_sqmi),
          Visits.APE = (abs(Visits.Predict - Night_visits_sqmi)) / Visits.Predict)
@@ -1749,7 +2166,7 @@ ErrorTable <-
   phl.test %>% 
   dplyr::summarize(Regression = "Baseline Regression",
                    MAE = mean(Visits.AbsError, na.rm = T), 
-                   MAPE = mean(Visits.AbsError, na.rm = T) / mean(Night_visits, na.rm = T)) 
+                   MAPE = mean(Visits.AbsError, na.rm = T) / mean(Night_visits_sqmi, na.rm = T)) 
 
 ErrorTable %>% 
   group_by(Regression) %>%
@@ -1760,6 +2177,12 @@ ErrorTable %>%
 The following chart compares the predicted values to the actual values for the training and test sets. The predicted value (green line) actually lines up pretty well with the actual value (orange line), but there are some outliers in the data that are contributing to the high MAE and MAPE.
 ```{r pred actual scatterplot}
 reg1_predict <- exp(predict(reg1, newdata = phl.test))
+
+# View(test)
+# length(exp(predict(reg1)))
+# length(phl.training$Night_visits_sqmi)
+# 
+# summary(phl.training)
 
 rmse.train <- caret::MAE(exp(predict(reg1)), phl.training$Night_visits_sqmi)
 rmse.test <- caret::MAE(reg1_predict, phl.test$Night_visits_sqmi)
@@ -1779,7 +2202,7 @@ ggplot(preds, aes(x = pred, y = actual, color = source)) +
   geom_abline(color = "orange") +
   theme_bw() +
   coord_equal() +
-  facet_wrap(~source, ncol = 1) +
+  facet_wrap(~source, ncol = 2) +
   labs(title = "Comparing predictions to actual values",
        x = "Predicted Value",
        y = "Actual Value",
@@ -1795,37 +2218,51 @@ fitControl <- trainControl(method = "cv",
                            number = 100,
                            savePredictions = TRUE)
 
-set.seed(717)
+set.seed(414)
 reg1.cv <- 
-  train(Night_visits_sqmi_log ~ ., data = st_drop_geometry(dat_pred_agg) %>% 
+  train(Night_visits_sqmi_log ~ ., data = st_drop_geometry(dat_pred_agg %>% 
+         filter(Night_visits_sqmi < 6659235)) %>% 
           dplyr::select(Night_visits_sqmi_log, 
-                    # phl_area, 
-                    phl_building_area,
-                    sg_distance_home,
+                    phl_building_size_log,
+                    # phl_UPenn,
+                    phl_Temple,
+                    # phl_CityHall,
+                    phl_rest_sqft_log,
+                    phl_bar_sqft_log,
+                    phl_vacrate_log,
+                    # phl_CenterCity,
+                    # sg_distance_home_log,
                     sg_dwell,
-                    sg_workday,
-                    sg_AM_PM,
-                    count_bars_a,
-                    count_rest_a,
-                    count_arts_a,
-                    count_college_a,
-                    count_sports_a,
-                    count_museums_a,
-                    count_amuse_a,
-                    count_hotels_a,
-                    nn_transit,
-                    nn_CenterCity,
-                    nn_parks, 
-                    count_late_tag,
-                    count_barpub_tag,
-                    count_drinks_tag, 
-                    count_cocktail_tag,
+                    count_bars_a_log,
+                    count_rest_a_log,
+                    count_arts_a_log,
+                    count_grocery_a_log,
+                    # count_childcare_a_log,
+                    # count_religious_a_log,
+                    # count_bars_a,
+                    # count_rest_a,
+                    # count_arts_a,
+                    # count_college_a,
+                    # count_sports_a,
+                    # count_museums_a,
+                    # count_amuse_a_log,
+                    # count_hotels_a,
+                    nn_transit_log,
+                    # nn_parking_log,
+                    nn_parks_log,
+                    # count_late_tag,
+                    # count_barpub_tag,
+                    corr_type,
+                    count_late_log,
+                    # count_barpub_log,
                     demo_pctWhite,
-                    demo_pctBlack, 
-                    demo_pctHisp,
-                    demo_medAge, 
-                    demo_MHI,
-                    demo_medrent), 
+                    # demo_pctBlack, 
+                    # demo_pctHisp_log,
+                    # demo_medAge,
+                    # demo_popdens,
+                    # demo_popdens_log,
+                    demo_medrent,
+                    demo_MHI), 
         method = "lm", 
         trControl = fitControl, 
         na.action = na.pass)
@@ -1846,9 +2283,12 @@ cv_preds <- reg1.cv$pred
 
 map_preds <- dat_pred_agg %>% 
   rowid_to_column(var = "rowIndex") %>% 
-  left_join(cv_preds, by = "rowIndex") %>% 
-  mutate(Visits.AbsError = abs(pred - Night_visits),
-         PercentError = (Visits.AbsError / Night_visits)*100) 
+  left_join(cv_preds, by = "rowIndex") %>%
+  group_by(corridor, corr_type) %>% #CONFIRM THIS APPROACH WITH MATT!
+  summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+            pred = mean(pred)) %>% 
+  mutate(Visits.AbsError = abs(exp(pred) - Night_visits_sqmi),
+         PercentError = (Visits.AbsError / Night_visits_sqmi)*100) 
 
 ErrorPlot1 <- ggplot() +
   geom_sf(data = phl_boundary, fill = "grey40") +
@@ -1878,8 +2318,8 @@ grid.arrange(ErrorPlot1, ErrorPlot2, ncol=2)
 Lastly, here we see the percent errors by corridor type. We seem to be best at predicting smaller corridors that are further from Center City.
 ```{r}
 map_preds %>% 
-  left_join(., st_drop_geometry(phl_corridors_pred), by = "corridor") %>%
-  drop_na(corr_type) %>%
+  # left_join(., st_drop_geometry(phl_corridors_pred), by = "corridor") %>%
+  # drop_na(corr_type) %>%
   st_as_sf() %>%
   ggplot() +
   geom_sf(data = phl_boundary, fill = 'grey60', color = "transparent") +
