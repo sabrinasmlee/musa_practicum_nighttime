@@ -1,0 +1,456 @@
+---
+title: "Feature engineering"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load packages, include=FALSE}
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(lubridate)
+library(datetime)
+library(viridis)
+library(gridExtra)
+library(kableExtra)
+library(dplyr)
+library(ggplot2)
+library(gganimate)
+library(riem)
+
+census_api_key("30bae866445f7bea5ea57b8f5fba60b11b8b145e", overwrite = TRUE, install = TRUE) 
+
+qBr <- function(df, variable, rnd) {
+  if (missing(rnd)) {
+    as.character(quantile(round(df[[variable]],0),
+                          c(.01,.2,.4,.6,.8), na.rm=T))
+  } else if (rnd == FALSE | rnd == F) {
+    as.character(formatC(quantile(df[[variable]]), digits = 3),
+                 c(.01,.2,.4,.6,.8), na.rm=T)
+  }
+}
+q5 <- function(variable) {as.factor(ntile(variable, 5))}
+palette3 <- viridis_pal()(3)
+palette5 <- viridis_pal()(5)
+mapTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2)
+  )
+}
+
+plotTheme <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 16,colour = "black"),
+    plot.subtitle = element_text(face="italic"),
+    plot.caption = element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_line("grey80", size = 0.1),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    strip.background = element_rect(fill = "grey80", color = "white"),
+    strip.text = element_text(size=12),
+    axis.title = element_text(size=12),
+    axis.text = element_text(size=10),
+    plot.background = element_blank(),
+    legend.background = element_blank(),
+    legend.title = element_text(colour = "black", face = "italic"),
+    legend.text = element_text(colour = "black", face = "italic"),
+    strip.text.x = element_text(size = 14)
+  )
+}
+
+# setwd("~/GitHub/musa_practicum_nighttime")
+```
+
+```{r load & wrangle data}
+dat <- read.csv("./data/moves_2018.csv")
+phila <- st_read("./demo/phila.geojson", quiet = TRUE)
+
+dat2 <- dat %>% 
+  dplyr::select(safegraph_place_id, 
+                date_range_start, 
+                date_range_end, 
+                raw_visit_counts,
+                raw_visitor_counts, 
+                visits_by_day, 
+                poi_cbg, 
+                visitor_home_cbgs, 
+                visitor_daytime_cbgs, 
+                visitor_work_cbgs, 
+                visitor_country_of_origin,
+                distance_from_home, 
+                median_dwell, 
+                bucketed_dwell_times, 
+                related_same_day_brand, 
+                related_same_month_brand, 
+                popularity_by_hour, 
+                popularity_by_day, 
+                device_type) %>%
+  left_join(., phila, by = "safegraph_place_id") %>% 
+  st_as_sf() %>%
+  st_transform('ESRI:102728')
+
+#Block group shapefiles (projected & unprojected)
+phl_cbg <- 
+  st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson", quiet = TRUE) %>%
+  mutate(GEOID10 = as.numeric(GEOID10))%>%
+  st_transform('ESRI:102728') 
+phl_cbg_unproj <- 
+  st_read("http://data.phl.opendata.arcgis.com/datasets/2f982bada233478ea0100528227febce_0.geojson", quiet = TRUE) %>%
+  mutate(GEOID10 = as.numeric(GEOID10),
+         Lat = as.numeric(INTPTLAT10),
+         Lon = as.numeric(INTPTLON10))
+
+#Boundaries shapefiles (projected & unprojected)
+PHL_boundary <- 
+  st_read("https://opendata.arcgis.com/datasets/405ec3da942d4e20869d4e1449a2be48_0.geojson", quiet = TRUE)%>%
+  st_transform('ESRI:102728') 
+PHL_boundary_unproj <- 
+  st_read("https://opendata.arcgis.com/datasets/405ec3da942d4e20869d4e1449a2be48_0.geojson", quiet = TRUE)
+
+#Corridor shapefiles (projected & unprojected)
+phl_corridors <- st_read("http://data.phl.opendata.arcgis.com/datasets/f43e5f92d34e41249e7a11f269792d11_0.geojson", quiet = TRUE)%>%
+  st_transform('ESRI:102728') 
+phl_corridors_unproj <- st_read("http://data.phl.opendata.arcgis.com/datasets/f43e5f92d34e41249e7a11f269792d11_0.geojson", quiet = TRUE)
+
+#Neighborhood shapefiles (projected & unprojected)
+phl_nhoods <- 
+  st_read("https://raw.githubusercontent.com/azavea/geo-data/master/Neighborhoods_Philadelphia/Neighborhoods_Philadelphia.geojson", 
+          quiet = TRUE) %>%
+  st_transform('ESRI:102728')
+phl_nhoods_unproj <- 
+  st_read("https://raw.githubusercontent.com/azavea/geo-data/master/Neighborhoods_Philadelphia/Neighborhoods_Philadelphia.geojson", 
+          quiet = TRUE)
+
+#Planning district shapefiles (projected & unprojected)
+phl_dist <-
+  st_read("http://data.phl.opendata.arcgis.com/datasets/0960ea0f38f44146bb562f2b212075aa_0.geojson", 
+          quiet = TRUE) %>%
+  st_transform('ESRI:102728')
+
+phl_dist_unproj <-
+  st_read("http://data.phl.opendata.arcgis.com/datasets/0960ea0f38f44146bb562f2b212075aa_0.geojson", 
+          quiet = TRUE)
+
+#Philadelphia zip codes
+phl_zip <- st_read("http://data.phl.opendata.arcgis.com/datasets/b54ec5210cee41c3a884c9086f7af1be_0.geojson", quiet = TRUE) %>%
+  st_transform('ESRI:102728') %>%
+  mutate(CODE = as.numeric(CODE))
+
+#Building footprints shpfile 
+phl_building_footprints <-
+  st_read("https://opendata.arcgis.com/datasets/ab9e89e1273f445bb265846c90b38a96_0.geojson", 
+          quiet = TRUE) %>%
+  st_transform('ESRI:102728')
+
+```
+
+```{r loading in prediction data}
+
+library(FNN)
+nn_function <- function(measureFrom,measureTo,k) {
+  measureFrom_Matrix <- as.matrix(measureFrom)
+  measureTo_Matrix <- as.matrix(measureTo)
+  nn <-   
+    get.knnx(measureTo, measureFrom, k)$nn.dist
+  output <-
+    as.data.frame(nn) %>%
+    rownames_to_column(var = "thisPoint") %>%
+    gather(points, point_distance, V1:ncol(.)) %>%
+    arrange(as.numeric(thisPoint)) %>%
+    group_by(thisPoint) %>%
+    dplyr::summarize(pointDistance = mean(point_distance)) %>%
+    arrange(as.numeric(thisPoint)) %>% 
+    dplyr::select(-thisPoint) %>%
+    pull()
+  
+  return(output)  
+}
+
+
+#Corridor shapefile
+phl_corridors_pred <- st_read("http://data.phl.opendata.arcgis.com/datasets/f43e5f92d34e41249e7a11f269792d11_0.geojson", quiet = TRUE)%>%
+  st_transform('ESRI:102728') %>%
+  select(4:5,18, 'Shape__Area') %>%
+  rename(., corridor = NAME,
+         district = P_DIST,
+         vacancy = VAC_RATE,
+         area = Shape__Area) %>%
+  mutate()
+
+## 
+
+#Spatial Features from SafeGraph Data
+bar.sf <- dat2 %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
+  select(location_name) %>%
+  st_as_sf(coords = "geometry", crs = 4326, agr = "constant")
+
+restaurant.sf <- dat2 %>%
+  filter(top_category == "Restaurants and Other Eating Places") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+arts.sf <- dat2 %>%
+  filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+           top_category == "Performing Arts Companies") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+college.sf <- dat2 %>%
+  filter(top_category == "Colleges, Universities, and Professional Schools") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+sports.sf <- dat2 %>%
+  filter(top_category == "Spectator Sports") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+casinos.sf <- dat2 %>%
+  filter(sub_category == "Casino Hotels") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+hotels.sf <- dat2 %>%
+  filter(sub_category == "Hotels (except Casino Hotels) and Motels") %>%
+  select(location_name) %>%
+  st_as_sf()
+
+st_c <- st_coordinates
+
+dat_corr <-
+  dat2 %>% 
+  st_join(phl_corridors_pred, join = st_intersects) %>%
+  drop_na(corridor)
+```
+
+```{r feature engineering for distance to transit}
+
+septaStops <- 
+  rbind(
+    st_read("https://opendata.arcgis.com/datasets/8c6e2575c8ad46eb887e6bb35825e1a6_0.geojson") %>% 
+    mutate(Line = "El") %>%
+    select(Station, Line),
+      st_read("https://opendata.arcgis.com/datasets/2e9037fd5bef406488ffe5bb67d21312_0.geojson") %>%
+      mutate(Line ="Broad_St") %>%
+      select(Station, Line)) %>%
+   st_transform(st_crs(phl_blockgroups))
+
+
+dat2 <- st_join(dat2 %>% st_transform(crs=4326),
+               septaStops %>%
+                 st_transform(crs=4326),
+               join=st_intersects, 
+               left = TRUE)
+
+```
+
+```{r feature engineering for area of building}
+
+phl_building_footprints <-
+  dplyr::rename(phl_building_footprints, street_address = ADDRESS)
+
+#merge phl_building_footprints with safegraph dat 
+dat_building_footprints <- dat %>%
+  dplyr::select(safegraph_place_id, street_address, date_range_start, date_range_end, raw_visit_counts,
+                       raw_visitor_counts, visits_by_day, poi_cbg, visitor_home_cbgs, 
+                       visitor_daytime_cbgs, visitor_work_cbgs, visitor_country_of_origin,
+                       distance_from_home, median_dwell, bucketed_dwell_times, related_same_day_brand, 
+                       related_same_month_brand, popularity_by_hour, popularity_by_day, device_type) %>%
+  left_join(., phl_building_footprints, by = "street_address") 
+```
+
+
+
+```{r census feature engineering}
+phl_blockgroups <- 
+  get_acs(geography = "block group", 
+        variables = c("B01003_001E", 
+                      "B02001_002E", 
+                      "B01002_001E",
+                      "B19013_001E", 
+                      "B25064_001E"),
+        year=2018, 
+        state=42, 
+        county=101, 
+        geometry=T, 
+        output = "wide") %>%
+  st_transform('ESRI:102728')%>%
+  rename(TotalPop = B01003_001E,
+         Whites = B02001_002E,
+         MedAge = B01002_001E,
+         MedHHInc = B19013_001E,
+         MedRent = B25064_001E,
+         GEOID10 = GEOID) %>%
+  mutate(pctWhites = ((Whites / TotalPop)*100),
+         Context_Race = ifelse(pctWhites > .5, "Majority White", "Majority Non-White"),
+         Context_Income = ifelse(MedHHInc > 46116, "High Income", "Low Income"),
+         Context_Age = ifelse(MedAge > 34.5, "High Median Age", "Low Median Age"),
+         Context_Rent = ifelse(MedRent > 1032, "High Median Rent", "Low Median Rent"))
+
+dat2 <- st_join(dat2 %>% st_transform(crs=4326),
+               phl_blockgroups %>%
+                 st_transform(crs=4326),
+               join=st_intersects, 
+               left = TRUE)
+
+```
+
+```{r open_hours column}
+phila %>%
+mutate(closing_time = ifelse(str_detect(open_hours, paste(c("20:00", "21:00", "22:00", "23:00", "0:00", "1:00", "2:00", "3:00"), collapse = "|")), "OPEN LATE", "NOT OPEN LATE"),
+	closing_time = ifelse(is.na(closing_time) == TRUE, "NO DATA", closing_time))
+
+phila <- st_join(phila %>% st_transform(crs=4326),
+               phl_blockgroups %>%
+                 st_transform(crs=4326),
+               join=st_intersects, 
+               left = TRUE)
+```
+
+
+```{r import weather data for feature engineering}
+
+# Get 2018 weather data
+weather.Panel <- 
+  riem_measures(station = "ORD", date_start = "2018-01-01", date_end = "2018-12-31") %>%
+  dplyr::select(valid, tmpf, p01i, sknt)%>%
+  replace(is.na(.), 0) %>%
+    mutate(date_range_start = as.Date(ymd_h(substr(valid,1,13)))) %>%
+    mutate(week = week(date_range_start),
+           dotw = wday(date_range_start, label=TRUE)) %>%
+    group_by(date_range_start) %>%
+    summarize(Temperature = max(tmpf),
+              Precipitation = sum(p01i),
+              Wind_Speed = max(sknt)) %>%
+    mutate(Temperature = ifelse(Temperature == 0, 42, Temperature))
+```
+
+
+```{r feature engineering}
+dat_corr <-
+  dat2 %>%
+  mutate(total = 1,
+         bars = ifelse(top_category == 'Drinking Places (Alcoholic Beverages)', 1, 0),
+         restaurant = ifelse(top_category == 'Restaurants and Other Eating Places', 1, 0),
+         arts = ifelse(top_category == 'Promoters of Performing Arts, Sports, and Similar Events' |
+                         top_category == 'Performing Arts Companies', 1, 0),
+         restaurant = ifelse(top_category == 'Restaurants and Other Eating Places', 1, 0),
+         jrcol = ifelse(top_category == 'Junior Colleges', 1, 0),
+         college = ifelse(top_category == 'Colleges, Universities, and Professional Schools', 1, 0),
+         sports = ifelse(top_category == 'Spectator Sports', 1, 0),
+         museum = ifelse(top_category == 'Museums, Historical Sites, and Similar Institutions', 1, 0),
+         hotels = ifelse(top_category == 'Traveler Accommodation', 1, 0),
+         bars_nn = nn_function(st_c(st_centroid(dat_corr)), st_c(st_centroid(bar.sf)), 4),
+         rest_nn = nn_function(st_c(st_centroid(dat_corr)), st_c(st_centroid(restaurant.sf)), 4),
+         arts_nn = nn_function(st_c(st_centroid(dat_corr)), st_c(st_centroid(arts.sf)), 4),
+         college_nn = nn_function(st_c(st_centroid(dat_corr)), st_c(st_centroid(college.sf)), 1),
+         sports_nn = nn_function(st_c(st_centroid(dat_corr)), st_c(st_centroid(sports.sf)), 1),
+         hotels_nn = nn_function(st_c(st_centroid(dat_corr)), st_c(st_centroid(hotels.sf)), 4),
+         casinos_nn = nn_function(st_c(st_centroid(dat_corr)), st_c(st_centroid(casinos.sf)), 1),
+         transit_nn = nn_function(st_c(st_centroid(dat_corr)), st_c(st_centroid(septaStops)), 1),
+         building_footprints_nn = nn_function(st_c(st_centroid(dat_corr)), st_c(st_centroid(dat_building_footprints)), 1),
+         late_night = if_else(grepl("Late Night", dat_corr$category_tags), 1, 0),
+         bar_pub = if_else(grepl("Bar or Pub", dat_corr$category_tags), 1, 0),
+         open_late = if_else(closing_time == "OPEN LATE", 1, 0),
+         majority_white = if_else(Context_Race == "Majority White", 1, 0),
+         majority_white = if_else(Context_Income == "High Income", 1, 0),
+         majority_white = if_else(Context_Age == "High Median Age", 1, 0),
+         majority_white = if_else(Context_Rent == "High Median Rent", 1, 0))
+```
+Next we wrangle the data to aggregate it at the corridor level. To start, we are looking at aggregated SafeGraph variables, such as median dwell time and average distance from home. 
+
+We also review the share of certain business types and characteristics along a specific corridor. These variables count the SafeGraph points of interest that fit into given category (bars, restaurants, college) and divide it by hte total number of businesses along the corridor. We also divide by 12 since the data is disaggregated by month.
+
+Finally, this code generates nearest neighbor variables for business by corridor.
+
+```{r Observe correlations}
+corr_test <- 
+  dat_corr %>%
+  group_by(corridor, area) %>%
+  summarize(visits = sum(raw_visit_counts),
+            total = sum(total),
+            area = mean(area),
+            sg_visitors = sum(raw_visitor_counts),
+            sg_dwell = mean(median_dwell, na.rm = TRUE),
+            sg_distance_home = mean(distance_from_home, na.rm = TRUE),
+            share_bars = sum(bars, na.rm = TRUE)/12/area,
+            share_rest = sum(restaurant, na.rm = TRUE)/12/area,
+            share_arts = sum(arts, na.rm = TRUE)/12/area,
+            share_jrcol = sum(jrcol, na.rm = TRUE)/12/area,
+            share_college = sum(college, na.rm = TRUE)/12/area,
+            share_sports = sum(sports, na.rm = TRUE)/12/area,
+            share_museums = sum(museum, na.rm = TRUE)/12/area,
+            nn_bars = mean(bars_nn),
+            nn_rest = mean(rest_nn),
+            nn_arts = mean(arts_nn),
+            nn_college = mean(college_nn),
+            nn_sports = mean(sports_nn),
+            nn_casinos = mean(casinos_nn),
+            nn_hotels = mean(hotels_nn),
+            nn_distance_transit = mean(transit_nn),
+            nn_building_footprints= mean(building_footprints_nn),
+            share_late_tag = sum(late_night, na.rm = TRUE)/12/area,
+            share_barpub_tag = sum(bar_pub, na.rm = TRUE)/12/area)
+```
+
+The following correlation plots summarize our findings. Looking first at the SafeGraph summary variables, the distnace from home has a strong relationship with total visits. The count of visitors also demonstrates a strong relationship, but this is likely collinear with the the number of visits.
+```{r corr plots}
+#Safegraph summary variables
+corr_test %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("sg_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, visits)) +
+  geom_point(size = .5) + 
+  geom_smooth(method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Visits as a function of SafeGraph Summary Variables",
+       subtitle = "Figure X.X") +
+  plotTheme()
+```
+
+The next set of plots show the relationship between the share a specific business type by corridor and the number of trips. There seems to be a relationship with businesses that could be classified as anchor institutions, such as colleges and museums, and the number of trips. These corrplots also look at businesses with a specific tag, such as a "late night" or "bar and pub". These corrplots rely on the businesses recorded in the SafeGraph dataset and represent a sample. Do we want to use another, more comprehensive dataset instead (e.g. OSM)?
+
+```{r}
+#Count variables
+corr_test %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("share_"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, visits)) +
+  geom_point(size = .5) + 
+  geom_smooth(formula = y ~ x, method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Visits as a function of Continuous Count Variables",
+       subtitle = "Figure X.X") +
+  plotTheme()
+```
+
+
+```{r}
+#Nearest neighbor variables for SEPTA stops 
+corr_test %>% 
+  st_drop_geometry() %>%
+  pivot_longer(., cols = starts_with("nn_distance_transit"), names_to = "variable", values_to="value") %>%
+  ggplot(aes(value, visits)) +
+  geom_point(size = .5) + 
+  geom_smooth(formula = y ~ x, method = "lm", se=F, colour = "#FA7800") +
+  facet_wrap(~variable, ncol = 3, scales = "free") +
+  labs(title = "Visits as a function of Nearest Neighbor Distance to SEPTA Transit stops") +
+  plotTheme()
+```
