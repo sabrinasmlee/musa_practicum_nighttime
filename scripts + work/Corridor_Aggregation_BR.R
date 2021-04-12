@@ -307,15 +307,6 @@ corr_origins_final <- corr_summary1 %>%
          distance_from_home = distance_from_home.x)
   
 
-#Plot flows
-corr_summary %>%  
-  filter(corridor_dest == "Wynnefield Heights") %>%
-  ggplot() + 
-  geom_sf(aes(fill = Count), color = "white") + 
-  scale_fill_distiller(palette="RdYlGn", direction = 1) +
-  labs(title = "Restaurant Trip % Change April 2018-2020") +
-  mapTheme()
-
 
 
 
