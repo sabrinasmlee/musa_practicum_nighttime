@@ -2097,7 +2097,7 @@ ggplot(preds, aes(x = pred, y = actual, color = source)) +
 We also test for generalizability with cross validation for the full dataset with the below code. The plot shows the Mean Average Error across 100 folds. 
 ```{r, out.width = "100%"}
 fitControl <- trainControl(method = "cv", 
-                           number = 100,
+                           number = 10,
                            savePredictions = TRUE)
 
 set.seed(414)
@@ -2423,20 +2423,30 @@ We also see improvement in the error terms in the below histogram comparing the 
 
 ```{r}
 fitControl <- trainControl(method = "cv", 
-                           number = 100,
-                           savePredictions = TRUE)
+                           number = 10,
+                           savePredictions = TRUE,
+                           search = "grid")
+?trainControl
 
 set.seed(414)
+
+tgrid <- expand.grid(
+  mtry = 2:7,
+  splitrule = "gini",
+  min.node.size = c(5, 10, 20))
+
+
 reg1.cv.rf <- 
   train(Night_visits_sqmi_log ~ ., data = st_drop_geometry(dat_pred_agg) %>% 
           dplyr::select(reg.vars), 
         method = "ranger", 
-        trControl = fitControl, 
-        na.action = na.pass)
+        trControl = fitControl,
+        na.action = na.pass,
+        tuneGrid = tgrid)
 
 reg1.cv.rf.resample <- reg1.cv.rf$resample
 
-reg1.cv.rf 
+reg1.cv.rf
 # ggplot(reg1.cv.rf.resample, aes(x=MAE)) + 
 #   geom_histogram(color = "grey40", fill = "#27fdf5", bins = 50) + 
 #   labs(title="Full Dataset: Histogram of Mean Average Error Across 100 Folds",
