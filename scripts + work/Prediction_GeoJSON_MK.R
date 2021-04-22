@@ -534,9 +534,9 @@ rf1 <-
 dat_scenario <-
   dat_pred %>%
   group_by(corridor, date_range_start) %>%
-  summarize(restaurants = sum(restaurant, na.rm = TRUE) + 1,
-            bars = sum(bars, na.rm = TRUE) + 1,
-            arts = sum(arts, na.rm = TRUE) + 1) %>%
+  summarize(restaurants = sum(restaurant, na.rm = TRUE),
+            bars = sum(bars, na.rm = TRUE),
+            arts = sum(arts, na.rm = TRUE)) %>%
   st_drop_geometry() %>%
   left_join(dat_pred_agg) %>%
   group_by(corridor) %>%
@@ -603,10 +603,7 @@ Scenario_preds_wide <-
             Preds.3 = mean(Preds.3),
             Preds.4 = mean(Preds.4)) 
 
-
-Scenario_preds_wide %>%
-  mutate(lat = st_coordinates(.)[,1],
-         long = st_coordinates(.)[,2])
+head(Scenario_preds_wide)
 
 Scenario_preds_long <-
   Scenario_preds_wide %>%
@@ -615,6 +612,8 @@ Scenario_preds_long <-
                names_to = "scenario",
                values_to = "prediction") %>%
   st_as_sf()
+
+head(Scenario_preds_long)
 
 #####################################
 # WRITE GEOJSON TO WORKING DIRECTORY
@@ -632,3 +631,148 @@ writeOGR(Scenario_preds_long.SP,
          'scenario.long.geojson', 
          'Scenario_preds_long.SP',
          driver = 'GeoJSON')
+
+##########
+# FUNCTION
+##########
+
+#Aggregating up to the corridor (modelling dataset is separated out by month)
+dat_agg_scenario <- 
+  dat_pred %>%
+  group_by(corridor, corr_type) %>%
+  summarize(Night_visits = sum(Hrs19_0),
+            phl_area_sqmi = mean(corr_area_sqmi, na.rm = TRUE),
+            Night_visits_sqmi = (Night_visits + 1) / phl_area_sqmi,
+            Night_visits_sqmi_log = log(Night_visits_sqmi),
+            total = sum(total),
+            phl_building_size = mean(bld_area_sqft +1, na.rm = TRUE),
+            phl_building_size_log = log(phl_building_size),
+            phl_building_size_med = median(bld_area_sqft, na.rm = TRUE),
+            phl_UPenn = mean(UPenn),
+            phl_rest_sqft = mean(restaurant_sqft +1,na.rm = T),
+            phl_rest_sqft_log = log(phl_rest_sqft),
+            phl_bar_sqft = mean(bars_sqft +1, na.rm = T),
+            phl_bar_sqft_log = log(phl_bar_sqft),
+            sg_dwell = mean(median_dwell, na.rm = TRUE),
+            sg_distance_home = mean(distance_from_home, na.rm = TRUE),
+            sg_distance_home_log = log(sg_distance_home),
+            count_bars = sum(bars, na.rm = TRUE)/12,
+            count_rest = sum(restaurant, na.rm = TRUE)/12,
+            count_arts = sum(arts, na.rm = TRUE)/12,
+            count_bars_a = (count_bars + 1)/phl_area_sqmi,
+            count_rest_a = (count_rest + 1)/phl_area_sqmi,
+            count_arts_a = (count_arts + 1)/phl_area_sqmi,
+            count_sports_a = (sum(sports, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_hotels_a = (sum(hotels, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_grocery_a = (sum(grocery, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_retailmix_top = n_distinct(top_category),
+            count_retailmix_sub = n_distinct(sub_category),
+            count_late_tag = (sum(late_night, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_openlate = (sum(open_late, na.rm = TRUE) + 1)/phl_area_sqmi,
+            count_bars_a_log = log(count_bars_a),
+            count_rest_a_log = log(count_rest_a),
+            count_arts_a_log = log(count_arts_a),
+            count_grocery_a_log = log(count_grocery_a),
+            count_late_log = log(count_late_tag),
+            count_retailmix_top_log = log(count_retailmix_top),
+            count_retailmix_sub_log = log(count_retailmix_sub),
+            count_openlate_log = log(count_openlate),
+            nn_transit = mean(transit_nn),
+            nn_parks = mean(parks_nn),
+            nn_busstop = mean(busstop_nn),
+            nn_trolley = mean(trolley_nn),
+            nn_parks_log = log(nn_parks),
+            nn_transit_log = log(nn_transit),
+            nn_busstop_log = log(nn_busstop),
+            nn_trolley_log = log(nn_trolley),
+            demo_popdens = mean(popdens_mi),
+            demo_popdens_log = log(demo_popdens),
+            demo_pctWhite = weighted.mean(pctWhite, Hrs19_0, na.rm = TRUE),
+            demo_pctBlack = weighted.mean(pctBlack, Hrs19_0, na.rm = TRUE),
+            demo_pctHisp = weighted.mean(pctHisp, Hrs19_0, na.rm = TRUE),
+            demo_medAge = weighted.mean(MedAge, Hrs19_0, na.rm = TRUE),
+            demo_MHI = weighted.mean(MedHHInc, Hrs19_0, na.rm = TRUE),
+            demo_medrent = weighted.mean(MedRent, Hrs19_0, na.rm = TRUE),
+            demo_pctHisp_log = log(demo_pctHisp + 1)) %>% 
+  st_drop_geometry() %>%
+  left_join(phl_corridors_pred %>% dplyr::select(corridor)) %>%
+  drop_na(corridor, demo_MHI, demo_medrent) %>% #Some of the census variables aren't reporting for our block groups
+  st_as_sf() %>%
+  ungroup() %>%
+  na.omit(st_distance_home)
+
+######
+ComboGrid <- function(dataset, rest_factor, bar_factor, arts_factor) {
+  
+  allCombos <- expand.grid(rest_factor = rest_factor,
+                           bar_factor = bar_factor,
+                           arts_factor = arts_factor) 
+  
+  allCombos <- tibble::rowid_to_column(allCombos, "scenario")
+  
+  return(allCombos)
+}
+
+ScenarioGenerator <- function(dataset, rest_factor, bar_factor, arts_factor) {
+
+  allCombos <- expand.grid(rest_factor = rest_factor,
+                           bar_factor = bar_factor,
+                           arts_factor = arts_factor) 
+
+  allCombos <- tibble::rowid_to_column(allCombos, "ID")
+
+  comboList <- unique(allCombos[['ID']])
+  allScenarios <- data.frame()
+
+for (i in comboList) {
+    
+  thisScenario <-
+    dataset %>%
+    dplyr::mutate(scenario = as.numeric(allCombos %>% filter(ID==i) %>% dplyr::select(ID)),
+                  count_rest = as.numeric(allCombos %>% filter(ID == i) %>% dplyr::select(rest_factor)) * count_rest,
+                  count_rest_a = count_rest/phl_area_sqmi,
+                  count_rest_a_log = log(count_rest_a + 1),
+                  count_bars = as.numeric(allCombos %>% filter(ID == i) %>% dplyr::select(bar_factor)) * count_bars,
+                  count_bars_a = count_bars/phl_area_sqmi,
+                  count_bars_a_log = log(count_bars_a + 1),
+                  count_arts = as.numeric(allCombos %>% filter(ID == i) %>% dplyr::select(arts_factor)) * count_arts,
+                  count_arts_a = count_arts/phl_area_sqmi,
+                  count_arts_a_log = log(count_arts_a + 1))
+
+  allScenarios <- rbind(allScenarios, thisScenario)
+
+}
+  return(allScenarios)
+}
+
+
+allScenario_preds <- ScenarioGenerator(dataset = dat_agg_scenario,
+                                       rest_factor = c(.9,.95,1, 1.05, 1.1),
+                                       bar_factor = c(.9,.95,1, 1.05, 1.1),
+                                       arts_factor = c(.9,.95,1, 1.05, 1.1))
+
+
+allCombos <- ComboGrid(dataset = dat_agg_scenario,
+                       rest_factor = c(.9,.95,1, 1.05, 1.1),
+                       bar_factor = c(.9,.95,1, 1.05, 1.1),
+                       arts_factor = c(.9,.95,1, 1.05, 1.1))
+
+#Predicting on the scenario dataset
+all.preds <- predict(rf1, data = Scenario_preds %>% as.data.frame())
+all.preds <- exp(all.preds$predictions)
+
+allScenario_final <-
+  allScenario_preds %>%
+  select(corridor, count_rest, count_arts, count_bars, Night_visits, phl_area_sqmi, scenario) %>%
+  mutate(predictions = all.preds * phl_area_sqmi,
+         pct.change = (predictions - Night_visits)/Night_visits * 100) %>%
+  left_join(., allCombos)
+
+allScenario_final %>%
+  filter(corridor == "Market East") %>% View()
+
+
+
+#Write to geo_json
+
+
