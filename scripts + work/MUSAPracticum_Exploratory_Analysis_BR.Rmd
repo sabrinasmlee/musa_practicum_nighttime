@@ -112,8 +112,8 @@ dat2 <- dat %>%
                        raw_visitor_counts, visits_by_day, poi_cbg, visitor_home_cbgs, 
                        visitor_daytime_cbgs, visitor_work_cbgs, visitor_country_of_origin,
                        distance_from_home, median_dwell, bucketed_dwell_times, related_same_day_brand, 
-                       related_same_month_brand, popularity_by_hour, popularity_by_day, device_type) %>%
-  # mutate(date_range_start = as.date(dat$date_range_start),
+                       related_same_day_brand, popularity_by_hour, popularity_by_day, device_type) %>%
+  #mutate(date_range_start = ) %>%
   #        date_range_end = as.date(dat$date_range_end)) %>%
   left_join(., phila, by = "safegraph_place_id") %>% 
   st_as_sf()
@@ -336,7 +336,7 @@ dat_hour %>%
   facet_wrap(~top_category)
 ```
 
-### Number of visits/vistors. Hourly/weekly/monthly patterns? (Brian)
+### Number of visits/vistors. Hourly/weekly/ly patterns? (Brian)
 ```{r}
 
 #Need to modify creation of dat_hour above by addiong poi_cbg:
