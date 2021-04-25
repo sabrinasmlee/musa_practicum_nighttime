@@ -362,14 +362,14 @@ summary(corr_group_final)
 
 Corr.group.SP <- corr_group_final %>% 
   na.omit() %>%
-  #st_transform(crs = "EPSG: 4326") %>%
   as.data.frame() %>%
-  st_as_sf()
+  st_as_sf() %>%
+  st_transform(crs = "EPSG: 4326")  
 
-Corr.group.SP <- as_Spatial(Corr.group.SP)
+Corr.group.SP <- as_Spatial(Corr.group.SP )
 
 writeOGR(Corr.group.SP, 
-         'corr.group.geojson', 
+         'corr.group1.GeoJSON', 
          'Corr.group.SP',
          driver = 'GeoJSON')
 
