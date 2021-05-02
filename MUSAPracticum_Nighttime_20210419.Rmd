@@ -113,6 +113,26 @@ mapTheme <- function(base_size = 12) {
     panel.border = element_rect(colour = "black", fill=NA, size=2)
   )
 }
+mapTheme_dark <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "black"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = "black"),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "black"),
+    panel.border = element_rect(colour = "black", fill=NA, size=2)
+  )
+}
+
+
 plotTheme <- function(base_size = 12) {
   theme(
     text = element_text( color = "black"),
@@ -448,13 +468,17 @@ dat_hour %>%
            # top_category == "Gambling Industries" |
            top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
            top_category == "Performing Arts Companies") %>%
-  group_by(Hour, top_category) %>%
+  mutate(category = case_when(top_category == "Drinking Places (Alcoholic Beverages)" ~ "Bars",
+                              top_category == "Restaurants and Other Eating Places" ~ "Restaurants",
+                              top_category == "Promoters of Performing Arts, Sports, and Similar Events" ~ "Arts",
+                              top_category == "Performing Arts Companies" ~ "Arts")) %>%
+  group_by(Hour, category) %>%
   dplyr::summarize(Count = mean(Count)) %>%
   ggplot(., aes(x = Hour, y = Count)) + 
   geom_col() +
   labs(title = "Philadelphia Nightlife Organizations, Average Traffic by Hour",
        subtitle = "Figure X.X") +
-  facet_wrap(~top_category, scales = "free") +
+  facet_wrap(~category, scales = "free") +
   plotTheme()
 ```
 
@@ -904,23 +928,6 @@ dat_hour_unnest <-
   mutate(Hour = as.numeric(Hour),
          Count = as.numeric(Count))
 
-# dat2 %>% 
-#   select(safegraph_place_id, date_range_start, popularity_by_hour) %>%
-#   mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
-#   unnest(popularity_by_hour) %>%
-#   separate(.,
-#            popularity_by_hour,
-#            c("0", "1", "2", "3", "4", "5", "6", 
-#              "7", "8", "9", "10", "11", "12", 
-#              "13", "14", "15", "16", "17", "18",
-#              "19", "20", "21", "22", "23"),
-#            sep = ",") %>%
-#   pivot_longer(cols = 3:26,
-#                names_to = "Hour",
-#                values_to = "Count") %>%
-#   mutate(Hour = as.numeric(Hour),
-#          Count = as.numeric(Count))
-
 dat_1_6 <- dat_hour_unnest %>%
   filter(Hour == "1" | 
            Hour == "2" | 
@@ -1251,13 +1258,24 @@ dat_citywide2 %>%
 
 Lookign at the trends another way, the below line plot shows how the traffic patterns for bars and restaurants were very similar, but the arts establishments made a stronger rebound at the end of 2020.
 ```{r}
-dat_citywide2 %>%
+rbind(
+  (dat_join2 %>% 
+  group_by(month) %>%
+  summarize(Total_Visits2018 = sum(NightVisits2018),
+            Total_Visits2020 = sum(NightVisits2020)) %>%
+  mutate(Percent_Change = (Total_Visits2020 - Total_Visits2018)/Total_Visits2018*100,
+         category = "All")), 
+  dat_citywide2) %>%
   ggplot(., aes(x = month, y = Percent_Change, group = category, color = category)) + 
   geom_line(lwd = 1.5) +
   geom_hline(yintercept=0, lwd = 1.5, linetype="dotted")+
+  scale_color_manual(values = c("#d3d3d3", "#440154", "#21908C", "#FDE725")) +
+  scale_x_discrete(name ="Month")+  
+  scale_y_continuous(name ="Percent Change") +
   labs(title = "Philadelphia Commercial Trip % Change, 2018 & 2020",
        subtitle = "Figure X.X") +
   plotTheme()
+  
 ```
 
 The following figure shows the change in restaurant traffic by Philadelphia block group. With the exception of a few areas, all block groups indicated a sharp decrease in restaurant traffic, many by over 50%.
@@ -1314,6 +1332,36 @@ dat_bars %>%
   mapTheme()
 ```
 
+The following map shows changes in traffic for all nightlife categories.
+
+```{r}
+dat_night <- dat_join2 %>%
+  filter(top_category == "Drinking Places (Alcoholic Beverages)" |
+             top_category == "Restaurants and Other Eating Places" |
+             top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
+             top_category == "Performing Arts Companies") %>%
+  filter(month == '04'| month == '05' | month == '06' | month == '07' | month == '08' | month == '09' | month =='10' | month == '11' | month == '12') %>%
+  mutate(GEOID10 = as.numeric(GEOID)) %>%
+  group_by(GEOID10) %>%
+  summarize(Total_Visits2018 = sum(NightVisits2018),
+            Total_Visits2020 = sum(NightVisits2020)) %>%
+  st_drop_geometry() %>%
+  left_join(phl_cbg) %>% 
+  st_as_sf() %>%
+  mutate(Percent_Change = (Total_Visits2020 - Total_Visits2018)/Total_Visits2018*100)
+
+#Plot bar map
+dat_night %>%  
+  # filter(Percent_Change < 300) %>%
+  mutate(percent_change = case_when(Percent_Change > 100 ~ 100, Percent_Change <= 100 ~ Percent_Change)) %>%
+  ggplot() + 
+  geom_sf(data = phl_boundary, fill = "grey20", color = "black")+
+  geom_sf(aes(fill = percent_change), color = "transparent") + 
+  scale_fill_distiller(palette="RdYlGn", direction = 1) +
+  labs(title = "Nightlife Trip % Change, April 2018 & April 2020") +
+  mapTheme()
+```
+
 Finally, in line with our earlier analysis on commercial corridors across Philadelphia, this map shows decrease of traffic to nightlife establishments along such corridors. While some smaller corridors did not experience much change in traffic or even a small increase in traffic, the majority of corridors saw a large decrease in traffic. This is particularly evident in Center City, along Market Street in West Philadelphia and at the airport. 
 ```{r corridor analysis}
 corridors_filter <- phl_corridors %>%
@@ -1360,7 +1408,8 @@ dat_corr %>%
   geom_sf(aes(fill = Percent_Change, geometry = geometry), color = "transparent") + 
   scale_fill_distiller(palette="RdYlGn", direction = 1) +
   labs(title = "Commercial Nighttime Trip % Change, April 2018 & 2020") +
-  mapTheme()
+  mapTheme_dark()
+
 
 # #% Commercial Trip Drop by Corridor
 # dat_corr_avg %>%
@@ -1584,6 +1633,7 @@ Finally, this code generates nearest neighbor variables for business by corridor
 ```{r Observe correlations}
 #Engineer variables at the destination level.
 # summary(dat_pred)
+# colnames(dat_pred_temp)
 dat_pred <-
   dat_pred_temp %>%
   dplyr::mutate(total = 1,
@@ -2131,7 +2181,7 @@ map_preds <- dat_pred_agg %>%
 
 #Quintile maps
 ErrorPlot1 <- ggplot() +
-  geom_sf(data = phl_boundary, fill = "grey40") +
+  geom_sf(data = phl_boundary, fill = "grey80", color = "grey40") +
   geom_sf(data = map_preds, aes(fill = q5(Visits.AbsError)), color = "transparent") +
   scale_fill_manual(values = palette5,
                       labels=qBr(map_preds,"Visits.AbsError"),
@@ -2142,7 +2192,7 @@ ErrorPlot1 <- ggplot() +
   mapTheme()
 
 ErrorPlot2 <- ggplot() +
-  geom_sf(data = phl_boundary, fill = "grey40") +
+  geom_sf(data = phl_boundary, fill = "grey80", color = "grey40") +
   geom_sf(data = map_preds, aes(fill = q5(PercentError)), color = "transparent") +
   scale_fill_manual(values = palette5,
                       labels=qBr(map_preds, "PercentError"),
@@ -2156,7 +2206,7 @@ grid.arrange(ErrorPlot1, ErrorPlot2, ncol=2)
 
 #Non quintile errors
 ErrorPlot3 <- ggplot() +
-  geom_sf(data = phl_boundary, fill = "grey40") +
+  geom_sf(data = phl_boundary, fill = "grey80", color = "grey40") +
   geom_sf(data = map_preds, aes(fill = Visits.AbsError), color = "transparent") +
   scale_fill_viridis() +
   labs(title="Absolute Errors",
@@ -2165,7 +2215,7 @@ ErrorPlot3 <- ggplot() +
   mapTheme()
 
 ErrorPlot4 <- ggplot() +
-  geom_sf(data = phl_boundary, fill = "grey40") +
+  geom_sf(data = phl_boundary, fill = "grey80", color = "grey40") +
   geom_sf(data = map_preds, aes(fill = PercentError), color = "transparent") +
   scale_fill_viridis() +
   labs(title="Percent Errors",
@@ -2307,7 +2357,7 @@ ggplot(preds.sub, aes(x = pred, y = actual, color = source)) +
 
 ## Random Forest Model
 
-#Feature Selection
+### Feature Selection
 
 To cope with the non-linearity in the model, we also tried the same features in a random forest model. In the below summary table, we see much improvement in the error terms (22% down from about 40%) and a .7 R squared.
 ```{r ranger}
@@ -2325,29 +2375,6 @@ rf1 <-
      importance = "impurity")
 
 rf1
-```
-
-The below Figure shows the importance of the various features in the model, with the density of restauratns, the businesses open late, the distance from home and the population density being the most important features.
-```{r}
-#Importance bar plot
-rf1_importance <-
-  importance(rf1) %>%
-  as.data.frame() %>%
-  setNames(c("importance")) %>%
-  rownames_to_column(., "variable") %>%
-  as.data.frame() %>%
-  mutate(importance = as.vector(importance)) 
-
-# rf1_importance <- rf1_importance[order(rf1_importance$importance, decreasing = TRUE),]
-# rf1_importance$importance <- factor(rf1_importance$importance, levels = rf1_importance$importance)
-
-rf1_importance %>% 
-  ggplot(aes(x=variable, y=importance)) +
-  geom_col() + 
-  plotTheme() +
-  labs(title = "Relative Importance for Random Forest Model Features",
-       subtitle = "Figure X.X") +
-  coord_flip()
 ```
 
 ### Error Terms
@@ -2391,6 +2418,7 @@ ggplot(preds.rf, aes(x = pred, y = actual, color = source)) +
 ```
 
 The below table compares  the error terms of the random forest model to the previous two models, we see a noticeable improvement.
+
 ```{r}
 #Error Table
 phl.test.rf <-
@@ -2410,9 +2438,32 @@ rbind(phl.test, phl.test.sub, phl.test.rf) %>%
   kable(caption = "MAE and MAPE for Test Set Data") %>% kable_styling()
 ```
 
-### Cross Validation
+The below Figure shows the importance of the various features in the model, with the density of restauratns, the businesses open late, the distance from home and the population density being the most important features.
+```{r}
+#Importance bar plot
+rf1_importance <-
+  importance(rf1) %>%
+  as.data.frame() %>%
+  setNames(c("importance")) %>%
+  rownames_to_column(., "variable") %>%
+  as.data.frame() %>%
+  mutate(importance = as.vector(importance)) 
 
-We also see improvement in the error terms in the below histogram comparing the mean average error in the linear model to the random forest model.
+# rf1_importance <- rf1_importance[order(rf1_importance$importance, decreasing = TRUE),]
+# rf1_importance$importance <- factor(rf1_importance$importance, levels = rf1_importance$importance)
+
+rf1_importance %>% 
+  ggplot(aes(x=variable, y=importance)) +
+  geom_col() + 
+  plotTheme() +
+  labs(title = "Relative Importance for Random Forest Model Features",
+       subtitle = "Figure X.X") +
+  coord_flip()
+```
+
+### Evaluating errors across time, space and type
+
+This analysis will help determine which has the largest source of undesired variance and how we should hypertune the model's parameters.
 
 ```{r}
 fitControl <- trainControl(method = "cv", 
@@ -2426,28 +2477,326 @@ reg1.cv.rf <-
           dplyr::select(reg.vars), 
         method = "ranger", 
         trControl = fitControl,
-        na.action = na.pass)
+        na.action = na.pass) 
 
-reg1.cv.rf.resample <- reg1.cv.rf$resample
+reg1.cv.rf.resample <- 
+  reg1.cv.rf$resample %>%
+  mutate(MAE = exp(MAE))
 
-reg1.cv.rf
-# ggplot(reg1.cv.rf.resample, aes(x=MAE)) + 
-#   geom_histogram(color = "grey40", fill = "#27fdf5", bins = 50) + 
-#   labs(title="Full Dataset: Histogram of Mean Average Error Across 100 Folds",
-#        subtitle = "Figure X.X") +
-#   plotTheme()
+reg1.cv.resample <- 
+  reg1.cv$resample %>%
+  mutate(MAE = exp(MAE))
+
+reg1.cv.rf 
 
 #Comparing random forest model and linear model errors.
 rbind(reg1.cv.resample %>% mutate(Regression = "Linear Model"), 
         reg1.cv.rf.resample %>% mutate(Regression = "Random Forest Model")) %>%
   ggplot(aes(x=MAE)) + 
   geom_histogram(color = "grey40", fill = "#27fdf5", bins = 50) + 
-  labs(title="Full Dataset: Histogram of Mean Average Error Across 100 Folds",
+  labs(title="Full Dataset: Histogram of Mean Average Error Across 10 Folds",
        subtitle = "Figure X.X") +
   facet_wrap(~Regression, ncol = 1) +
+  scale_x_continuous(name = "Mean Average Error") +
+  scale_y_continuous(name = "Count") +
   plotTheme()
 
+
 ```
+
+```{r}
+cv_preds_rf <- reg1.cv.rf$pred
+
+map_preds <- dat_pred_agg %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds_rf, by = "rowIndex") 
+
+#Comparing errors by time
+map_preds %>%
+  group_by(date_range_start) %>% 
+  summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+            pred = mean(pred)) %>% 
+  dplyr::mutate(MAE = round(abs(exp(pred) - Night_visits_sqmi),2),
+                MAPE = round((MAE / Night_visits_sqmi)*100,2)) %>%
+  st_drop_geometry() %>%
+  dplyr::select(date_range_start, MAE, MAPE) %>%
+  mutate(date_range_start = str_remove_all(date_range_start, pattern = "T05:00:00Z"),
+         date_range_start = str_remove_all(date_range_start, pattern = "T04:00:00Z")) %>%
+  kable(caption = "Errors by Month") %>%
+  kable_styling()
+
+#Comparing errors by corr tpe
+map_preds %>%
+  group_by(corr_type) %>% 
+  summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+            pred = mean(pred)) %>% 
+  dplyr::mutate(MAE = round(abs(exp(pred) - Night_visits_sqmi),2),
+                MAPE = round((MAE / Night_visits_sqmi)*100,2)) %>%
+  st_drop_geometry() %>%
+  dplyr::select(corr_type, MAE, MAPE) %>%
+  kable(caption = "Errors by Corridor Type") %>%
+  kable_styling()
+
+#Bar Plot
+test <- map_preds %>%
+  group_by(date_range_start) %>% 
+  summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+            pred = mean(pred)) %>% 
+  dplyr::mutate(MAE = round(abs(exp(pred) - Night_visits_sqmi),2),
+                MAPE = round((MAE / Night_visits_sqmi)*100,2)) %>%
+  st_drop_geometry() %>%
+  dplyr::select(date_range_start, MAE, MAPE, Night_visits_sqmi) %>%
+  mutate(date_range_start = str_remove_all(date_range_start, pattern = "T05:00:00Z"),
+         date_range_start = str_remove_all(date_range_start, pattern = "T04:00:00Z"))
+
+# test %>%
+#   mutate(date_range_start = as_date(date_range_start),
+#          month = month(date_range_start)) %>%
+#   select(month, Night_visits_sqmi, MAPE) %>%
+#   ggplot() +
+#   geom_col(aes(x = month, y = MAPE)) +
+#   geom_line(aes(x = month, y = Night_visits_sqmi), size = 1.5, color="red", group = 1)+
+#   scale_y_continuous(
+#     name = "Mean Average Percent Error",
+#     sec.axis = sec_axis( trans=~.*1/1000, name="Night Visits")) +
+#   plotTheme()
+
+
+ggplot(data, aes(fill=condition, y=value, x=specie)) + 
+    geom_bar(position="dodge", stat="identity")
+
+#Comparing errors by space
+map_preds %>%
+  group_by(corridor) %>% 
+  summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+            pred = mean(pred)) %>% 
+  dplyr::mutate(MAE = round(abs(exp(pred) - Night_visits_sqmi),2),
+                MAPE = round((MAE / Night_visits_sqmi)*100,2)) %>%
+  st_drop_geometry() %>%
+  dplyr::select(corridor, MAE, MAPE) %>%
+  kable(caption = "Errors by Space") %>%
+  kable_styling()
+
+#Comparing errors corridor type
+map_preds %>%
+  group_by(corr_type) %>% 
+  summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+            pred = mean(pred)) %>% 
+  dplyr::mutate(MAE = round(abs(exp(pred) - Night_visits_sqmi),2),
+                MAPE = round((MAE / Night_visits_sqmi)*100,2)) %>%
+  st_drop_geometry() %>%
+  dplyr::select(corr_type, MAE, MAPE) %>%
+  kable(caption = "Errors by Space") %>%
+  kable_styling()
+
+#Comparing standard deviation
+rbind(
+  (map_preds %>%
+    group_by(date_range_start) %>% 
+    summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+              pred = mean(pred)) %>%
+    dplyr::mutate(MAE = round(abs(exp(pred) - Night_visits_sqmi),2),
+                  SD_MAE= round(sd(MAE), 2),
+                  Split = "Time") %>%
+     select(-date_range_start)),
+  (map_preds %>%
+    group_by(corridor) %>% 
+    summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+              pred = mean(pred)) %>%
+    dplyr::mutate(MAE = round(abs(exp(pred) - Night_visits_sqmi),2),
+                  SD_MAE= round(sd(MAE), 2),
+                  Split = "Space") %>%
+     select(-corridor)),
+    (map_preds %>%
+    group_by(corr_type) %>% 
+    summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+              pred = mean(pred)) %>%
+    dplyr::mutate(MAE = round(abs(exp(pred) - Night_visits_sqmi),2),
+                  SD_MAE= round(sd(MAE), 2),
+                  Split = "Type") %>%
+      select(-corr_type))) %>%
+  st_drop_geometry() %>%
+  group_by(Split) %>%
+  summarize(MAE = mean(MAE),
+            SD_MAE = mean(SD_MAE))
+  
+#Confirm this approach
+```
+
+### Tuning Hyperparameters
+
+Per the above analysis, there is the greatest variation in the space split so we are going to tune based on that feature.
+
+```{r}
+set.seed(414)
+
+phl.training.rf_fit <- dat_pred_agg[inTrain,]
+phl.test.rf_fit <- dat_pred_agg[-inTrain,]
+
+library("tidymodels")
+data_split <- initial_split(dat_pred_agg, strata = "Night_visits_sqmi_log", prop = 0.60)
+
+model_rec <- recipe(Night_visits_sqmi_log ~ ., data = phl.training.rf %>% 
+                      dplyr::select(reg.vars) %>% 
+                      st_drop_geometry())
+
+#Splitting by date - does that make sense?
+cv_splits_time <- group_vfold_cv(phl.training.rf%>%
+                      dplyr::select(date_range_start, reg.vars) %>%
+                      st_drop_geometry(),
+                      strata = "Night_visits_sqmi_log",
+                      group = "date_range_start")
+
+#Splitting by date - does that make sense?
+# cv_splits_space <- group_vfold_cv(phl.training.rf%>% 
+#                       dplyr::select(corridor, reg.vars) %>% 
+#                       st_drop_geometry(),  
+#                       strata = "Night_visits_sqmi_log", 
+#                       group = "corridor")
+
+#Splitting by date - does that make sense?
+# cv_splits_type <- group_vfold_cv(phl.training.rf%>% 
+#                       dplyr::select(reg.vars) %>% 
+#                       st_drop_geometry(),  
+#                       strata = "Night_visits_sqmi_log", 
+#                       group = "corr_type")
+
+rf_plan <- rand_forest() %>%
+  set_args(mtry  = tune()) %>%
+  set_args(min_n = tune()) %>%
+  set_args(trees = 1000) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("regression")
+
+#Question for Matt - how do I know the right values to try here?
+rf_grid <- expand.grid(mtry = c(2, 5, 10, 15, 20), 
+                       min_n = c(5, 10, 50))
+
+rf_wf <-
+  workflow() %>% 
+  add_recipe(model_rec) %>% 
+  add_model(rf_plan)
+
+control <- control_resamples(save_pred = TRUE, verbose = TRUE)
+
+#Time
+rf_tuned_time <- rf_wf %>%
+  tune::tune_grid(.,
+                  resamples = cv_splits_time,
+                  grid      = rf_grid,
+                  control   = control,
+                  metrics   = metric_set(rmse, rsq))
+
+#Space
+# rf_tuned_space <- rf_wf %>%
+#   tune::tune_grid(.,
+#                   resamples = cv_splits_space,
+#                   grid      = rf_grid,
+#                   control   = control,
+#                   metrics   = metric_set(rmse, rsq))
+# 
+# #Type
+# rf_tuned_type <- rf_wf %>%
+#   tune::tune_grid(.,
+#                   resamples = cv_splits_type,
+#                   grid      = rf_grid,
+#                   control   = control,
+#                   metrics   = metric_set(rmse, rsq))
+
+show_best(rf_tuned_time, metric = "rmse", n = 15)
+# show_best(rf_tuned_space, metric = "rmse", n = 15)
+# show_best(rf_tuned_type, metric = "rmse", n = 15)
+
+
+rf_best_params_time  <- select_best(rf_tuned_time, metric = "rmse")
+
+rf_best_wf_time <- finalize_workflow(rf_wf, rf_best_params_time)
+
+rf_val_fit_time <- rf_best_wf_time %>% 
+  last_fit(split     = data_split,
+           control   = control,
+           metrics   = metric_set(rmse, rsq))
+
+rf_val_fit_time$.metrics
+```
+
+### Reevaluating error terms after tuning hyperparameters
+
+```{r}
+rf1_predict.train_fit <- predict(rf_val_fit_time$.workflow, 
+                                 new_data = st_drop_geometry(phl.training.rf_fit))
+rf1_predict.train_fit <- exp(rf1_predict.train_fit %>% 
+                               as.data.frame())
+
+rf1_predict.test_fit <- predict(rf_val_fit_time$.workflow, 
+                                new_data = st_drop_geometry(phl.test.rf_fit))
+rf1_predict.test_fit <- exp(rf1_predict.test_fit %>% as.data.frame())
+
+rmse.train.rf_fit <- caret::MAE(rf1_predict.train_fit, phl.training.rf$Night_visits_sqmi)
+rmse.test.rf_fit <- caret::MAE(rf1_predict.test_fit, phl.test.rf$Night_visits_sqmi)
+
+preds.train.rf_fit <- data.frame(pred   = rf1_predict.train_fit,
+                          actual = phl.training.rf$Night_visits_sqmi,
+                          source = "training data")
+preds.test.rf_fit <- data.frame(pred   = rf1_predict.test_fit,
+                          actual = phl.test.rf$Night_visits_sqmi,
+                          source = "testing data")
+
+preds.rf_fit <- rbind(preds.train.rf_fit, preds.test.rf_fit)
+
+ggplot(preds.rf_fit, aes(x = .pred, y = actual, color = source)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "green") +
+  geom_abline(color = "orange") +
+  theme_bw() +
+  coord_equal() +
+  facet_wrap(~source, ncol = 2) +
+  labs(title = "Comparing predictions to actual values",
+       x = "Predicted Value",
+       y = "Actual Value",
+       subtitle = "Figure X.X") +
+  theme(
+    legend.position = "none"
+  )
+
+#Error Table
+phl.test.rf_fit <-
+  phl.test.rf_fit %>%
+  # st_drop_geometry() %>%
+  mutate(Regression = "RF Regression with Tuned Hyperparameters",
+         # Visits.Predict = exp(predict(reg1.sub, phl.test.sub)),
+         Visits.Predict = as.vector(rf1_predict.test_fit),
+         Visits.Error = Visits.Predict - Night_visits_sqmi,
+         Visits.AbsError = abs(Visits.Predict - Night_visits_sqmi),
+         Visits.APE = (abs(Visits.Predict - Night_visits_sqmi)) / Visits.Predict)
+
+
+rbind(phl.test.rf, st_drop_geometry(phl.test.rf_fit)) %>%
+  group_by(Regression) %>%
+  dplyr::summarize(MAE = mean(Visits.AbsError, na.rm = T),
+                   MAPE = mean(Visits.AbsError, na.rm = T) / mean(Night_visits_sqmi, na.rm = T)) %>% 
+  kable(caption = "MAE and MAPE for Test Set Data") %>% kable_styling()
+```
+
+
+```{r}
+cv_preds <- rf_val_fit_time$.predictions
+
+map_preds <- dat_pred_agg %>% 
+  rowid_to_column(var = "rowIndex") %>% 
+  left_join(cv_preds, by = "rowIndex") %>%
+  group_by(corridor, corr_type) %>% #CONFIRM THIS APPROACH WITH MATT!
+  summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
+            pred = mean(pred)) %>% 
+  dplyr::mutate(Visits.AbsError = abs(exp(pred) - Night_visits_sqmi),
+         PercentError = (Visits.AbsError / Night_visits_sqmi)*100) 
+
+```
+### Cross Validation
+
+We also see improvement in the error terms in the below histogram comparing the mean average error in the linear model to the random forest model.
+
+
 
 ### LOGO-CV
 
@@ -2736,88 +3085,6 @@ rbind(phl.test, phl.test.sub, phl.test.rf.sub, phl.test.rf, phl.test.day, phl.te
   kable(caption = "MAE and MAPE for Test Set Data") %>% kable_styling()
 ```
 
-### Tuning Hyperparameters
-
-```{r set up}
-#Package installs -------------------------------------------------------------
-load.fun <- function(x) { 
-  x <- as.character(x) 
-  if(isTRUE(x %in% .packages(all.available=TRUE))) { 
-    eval(parse(text=paste("require(", x, ")", sep=""))) 
-    print(paste(c(x, " : already installed; requiring"), collapse=''))
-  } else { 
-    #update.packages()
-    print(paste(c(x, " : not installed; installing"), collapse=''))
-    eval(parse(text=paste("install.packages('", x, "')", sep=""))) 
-    print(paste(c(x, " : installed and requiring"), collapse=''))
-    eval(parse(text=paste("require(", x, ")", sep=""))) 
-  } 
-} 
-
-########### Required Packages ###########
-packages = c("bayesplot", "lme4", "rstan", "shinystan", "RcppEigen",
-             "tidyverse", "tidyr", "AmesHousing", "broom", "caret", "dials", "doParallel", "e1071", "earth",
-             "ggrepel", "glmnet", "ipred", "klaR", "kknn", "pROC", "rpart", "randomForest",
-             "sessioninfo", "tidymodels","ranger", "recipes", "workflows", "themis","xgboost",
-             "sf", "nngeo", "mapview")
-
-for(i in seq_along(packages)){
-  packge <- as.character(packages[i])
-  load.fun(packge)
-}
-```
-
-```{r}
-set.seed(414)
-data_split <- initial_split(dat_pred_agg, strata = "Night_visits_sqmi_log", prop = 0.60)
-
-model_rec <- recipe(Night_visits_sqmi_log ~ ., data = phl.training.rf %>% 
-                      dplyr::select(reg.vars) %>% 
-                      st_drop_geometry())
-
-#Splitting by date - does that make sense?
-cv_splits_date <- group_vfold_cv(phl.training.rf%>% 
-                      dplyr::select(date_range_start, reg.vars) %>% 
-                      st_drop_geometry(),  
-                      strata = "Night_visits_sqmi_log", 
-                      group = "date_range_start")
-
-rf_plan <- rand_forest() %>%
-  set_args(mtry  = tune()) %>%
-  set_args(min_n = tune()) %>%
-  set_args(trees = 1000) %>% 
-  set_engine("ranger", importance = "impurity") %>% 
-  set_mode("regression")
-
-#Question for Matt - how do I know the right values to try here?
-rf_grid <- expand.grid(mtry = c(2,5), 
-                       min_n = c(1,5))
-
-rf_wf <-
-  workflow() %>% 
-  add_recipe(model_rec) %>% 
-  add_model(rf_plan)
-
-control <- control_resamples(save_pred = TRUE, verbose = TRUE)
-
-rf_tuned <- rf_wf %>%
-  tune::tune_grid(.,
-                  resamples = cv_splits_date,
-                  grid      = rf_grid,
-                  control   = control,
-                  metrics   = metric_set(rmse, rsq))
-
-show_best(rf_tuned, metric = "rmse", n = 15)
-
-rf_best_params  <- select_best(rf_tuned, metric = "rmse")
-
-rf_best_wf <- finalize_workflow(rf_wf, rf_best_params)
-
-rf_val_fit_date <- rf_best_wf %>% 
-  last_fit(split     = data_split,
-           control   = control,
-           metrics   = metric_set(rmse, rsq))
-```
 
 # 5. App Development
 

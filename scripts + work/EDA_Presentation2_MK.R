@@ -280,6 +280,28 @@ dat3 <-
 # VIZ
 ######
 
+mapTheme_dark <- function(base_size = 12) {
+  theme(
+    text = element_text( color = "black"),
+    plot.title = element_text(size = 14,colour = "white"),
+    plot.subtitle=element_text(face="italic"),
+    plot.caption=element_text(hjust=0),
+    axis.ticks = element_blank(),
+    panel.background = element_rect(fill = "black",
+                                    colour = "black",
+                                    size = 0.5),
+    axis.title = element_blank(),
+    axis.text = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=2),
+    plot.background = element_rect(fill = "black")
+  )
+}
+
+
 ##----1. Corridor typologies
 # 1. Neighborhood Subcenter - 10,000 - 35,000 sq.ft. GLA convenience store grocery, pharmacy, dry cleaner, deli, etc.
 # 2. Neighborhood Center - 30,000 - 120,000 sq.ft. GLA supermarket, variety store, bank, pharmacy, post office, etc.
@@ -291,7 +313,7 @@ dat3 <-
 #V1 - 1 map
 phl_corridors %>%
   ggplot() +
-  geom_sf(data = phl_boundary, fill = "grey60", color = "transparent") +
+  geom_sf(data = phl_boundary, fill = "grey80", color = "grey40") +
   geom_sf(aes(fill = corr_type), color = "transparent") +
   scale_fill_viridis_d() +
   labs(title = "Philadelphia Corridor Typologies",
@@ -507,6 +529,91 @@ dat3 %>%
   guides(fill=guide_legend(title=NULL)) +
   plotTheme()
 
+#---Alternative to workday ratio (confusing):  Evening Trip percentage by corridor type
+# colnames(dat3)
+dat3 %>%
+  group_by(NAME.y) %>%
+  summarize(Hrs1_6 = sum(Hrs1_6),
+            Hrs7_12 = sum(Hrs7_12),
+            Hrs13_18 = sum(Hrs13_18),
+            Hrs19_0 = sum(Hrs19_0)) %>%
+  mutate(TotalTrips = Hrs1_6 + Hrs7_12 + Hrs13_18 + Hrs19_0,
+         Pct.EveningTrips = Hrs19_0 / TotalTrips *100) %>%
+  st_drop_geometry() %>%
+  dplyr::rename(NAME = NAME.y) %>%
+  left_join(phl_corridors %>% select(NAME, geometry)) %>%
+  st_as_sf() %>%
+  ggplot() +
+  geom_sf(data = phl_boundary, fill = 'grey80', color = 'grey40') +
+  geom_sf(aes(fill = q5(Pct.EveningTrips)), color = "transparent") +
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "Share of Evening Trips \n(Quintile)") +
+  # geom_sf(aes(fill = Pct.EveningTrips), color = "transparent") +
+  # scale_fill_viridis() +
+  mapTheme() +
+  theme(legend.position = "bottom")
+
+dat3 %>%
+  st_drop_geometry() %>%
+  drop_na(corr_type) %>%
+  group_by(corr_type) %>%
+  summarize(Hrs1_6 = sum(Hrs1_6),
+            Hrs7_12 = sum(Hrs7_12),
+            Hrs13_18 = sum(Hrs13_18),
+            Hrs19_0 = sum(Hrs19_0)) %>%
+  mutate(TotalTrips = Hrs1_6 + Hrs7_12 + Hrs13_18 + Hrs19_0,
+         Pct.EveningTrips = Hrs19_0 / TotalTrips *100) %>%
+  ggplot(aes(y = Pct.EveningTrips, x = corr_type)) +
+  geom_bar(stat = "identity") + 
+  plotTheme() +
+  scale_x_discrete(name ="Corridor Type")+  
+  scale_y_continuous(name ="Percent of Trips during Evening")
+
+#---Percent Workday traffic
+
+dat3 %>%
+  st_drop_geometry() %>%
+  drop_na(corr_type) %>%
+  group_by(corr_type) %>%
+  summarize(Hrs1_6 = sum(Hrs1_6),
+            Hrs7_12 = sum(Hrs7_12),
+            Hrs13_18 = sum(Hrs13_18),
+            Hrs19_0 = sum(Hrs19_0),
+            Hrs_workday = sum(Hrs_workday)) %>%
+  mutate(TotalTrips = Hrs1_6 + Hrs7_12 + Hrs13_18 + Hrs19_0,
+         Pct.WorkdayTrips = Hrs_workday / TotalTrips *100) %>%
+  ggplot(aes(y = Pct.WorkdayTrips, x = corr_type)) +
+  geom_bar(stat = "identity") + 
+  scale_x_discrete(name ="Corridor Type")+  
+  scale_y_continuous(name ="Percent of Trips during Workday") +
+  plotTheme()
+
+
+dat3 %>%
+  group_by(NAME.y) %>%
+  summarize(Hrs1_6 = sum(Hrs1_6),
+            Hrs7_12 = sum(Hrs7_12),
+            Hrs13_18 = sum(Hrs13_18),
+            Hrs19_0 = sum(Hrs19_0),
+            Hrs_workday = sum(Hrs_workday)) %>%
+  mutate(TotalTrips = Hrs1_6 + Hrs7_12 + Hrs13_18 + Hrs19_0,
+         Pct.WorkdayTrips = Hrs_workday / TotalTrips *100) %>%
+  st_drop_geometry() %>%
+  dplyr::rename(NAME = NAME.y) %>%
+  left_join(phl_corridors %>% select(NAME, geometry)) %>%
+  st_as_sf() %>%
+  ggplot() +
+  geom_sf(data = phl_boundary, fill = 'grey80', color = 'grey40') +
+  geom_sf(aes(fill = q5(Pct.WorkdayTrips)), color = "transparent") +
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "Workday Trip Share \n(Quintile)") +
+  # geom_sf(aes(fill = Pct.WorkdayTrips), color = "transparent") +
+  # scale_fill_viridis() +
+  mapTheme()+
+  theme(legend.position = "bottom")
+  
 
 ###POPULARITY BY NIGHTLIFE ESTABLISHMENT TYPE
 dat3 %>%
@@ -550,7 +657,7 @@ dat3 %>%
   left_join(., phl_corridors) %>%
   st_as_sf() %>%
   ggplot() +
-  geom_sf(data = phl_boundary, fill = "grey60", color = "transparent") +
+  geom_sf(data = phl_boundary, fill = "grey80", color = "grey40") +
   geom_sf(aes(fill = q5(distance_from_home)), color = "transparent") +
   scale_fill_manual(values = palette5,
                     aesthetics = c("colour", "fill"),
@@ -587,7 +694,7 @@ dat3 %>%
 
 ##----4. Median Dwell Time
 #Quintile transformation
-dat3 %>%  drop_na(NAME.y) %>%
+dat3 %>%  drop_na(NAME.y, corr_type) %>%
   group_by(NAME.y) %>%
   summarize(median_dwell = median(median_dwell, na.rm = TRUE)) %>%
   st_drop_geometry() %>%
@@ -596,11 +703,10 @@ dat3 %>%  drop_na(NAME.y) %>%
   st_as_sf() %>%
   ggplot() +
   geom_sf(data = phl_boundary, fill = "grey60", color = "transparent") +
-  geom_sf(aes(fill = q5(median_dwell)), color = "transparent") +
-  scale_fill_manual(values = palette5,
-                    aesthetics = c("colour", "fill"),
-                    name = "Median Dwell \n(Quintile)") +
-  facet_wrap(~corr_type) +
+  geom_sf(aes(fill = median_dwell), color = "transparent") +
+  # scale_fill_manual(values = palette5,
+  #                   aesthetics = c("colour", "fill"),
+  #                   name = "Median Dwell \n(Quintile)") +
   mapTheme()
 
 #Barplots
@@ -720,11 +826,12 @@ flows_nhood <- flows_nhood %>%
 #Faceted Map
 flows_nhood %>% 
   filter(corridor_dest == "South Street/16th-21st" | #Neighborhood Subcenter
-           corridor_dest == "Fairmount/19th-25th" | #Neighborhood Center
-           corridor_dest == "Central Waterfront/Washington" | #Community Center
-           corridor_dest == "Market West" | #Regional Center
-           corridor_dest == "Market East" | #Superregional Center
-           corridor_dest == "Old City") %>% #Specialty Center
+           # corridor_dest == "Fairmount/19th-25th" | #Neighborhood Center
+           # corridor_dest == "Central Waterfront/Washington" | #Community Center
+           corridor_dest == "Market West" #Regional Center
+           # corridor_dest == "Market East" | #Superregional Center
+           # corridor_dest == "Old City"
+           ) %>% #Specialty Center
   ggplot() + 
   geom_polygon(data = PHL_boundary_unproj, aes(x=X, y=Y), fill = "grey20") + 
   geom_segment(aes(x = lat.origin, y = long.origin, xend = lat.dest, yend = long.dest,  
@@ -830,3 +937,23 @@ cbg_map %>%
   #      subtitle = "Figure X.X") +
   facet_wrap(~corr_type.x) +
   mapTheme()
+
+
+#----6. Retail Mix
+retail.mix <- dat3 %>%
+  group_by(NAME.y) %>%
+  summarize(retail.mix = n_distinct(top_category)) %>%
+  dplyr::rename(NAME = NAME.y) %>%
+  st_drop_geometry() %>%
+  left_join(phl_corridors %>% select(NAME, geometry)) %>%
+  st_as_sf()
+  
+retail.mix %>%
+  ggplot() +
+  geom_sf(data = phl_boundary, fill = "grey80", color = "grey40") +
+  geom_sf(aes(fill = q5(retail.mix)), color = "transparent") +
+  scale_fill_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "Retail Mix \n(Quintile)") +
+  mapTheme()
+

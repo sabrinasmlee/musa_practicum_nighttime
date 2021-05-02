@@ -895,7 +895,7 @@ Next, we look at SafeGraph variables in the context of commercial corridor typol
 ```{r}
 dat_hour_unnest <- 
   dat2 %>% 
-  select(safegraph_place_id, date_range_start, popularity_by_hour) %>%
+  dplyr::select(safegraph_place_id, date_range_start, popularity_by_hour) %>%
   mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>%
   unnest(popularity_by_hour) %>%
   separate(.,
@@ -1390,43 +1390,43 @@ This first code block loads in data that we will use for the predictive model.
 #SafeGraph Features
 bar.sf <- dat2 %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
-  select(location_name) %>%
+  dplyr::select(location_name) %>%
   st_as_sf(coords = "geometry", crs = 4326, agr = "constant")
 
 restaurant.sf <- dat2 %>%
   filter(top_category == "Restaurants and Other Eating Places") %>%
-  select(location_name) %>%
+  dplyr::select(location_name) %>%
   st_as_sf()
 
 arts.sf <- dat2 %>%
   filter(top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
            top_category == "Performing Arts Companies") %>%
-  select(location_name) %>%
+  dplyr::select(location_name) %>%
   st_as_sf()
 
 college.sf <- dat2 %>%
   filter(top_category == "Colleges, Universities, and Professional Schools") %>%
-  select(location_name) %>%
+  dplyr::select(location_name) %>%
   st_as_sf()
 
 sports.sf <- dat2 %>%
   filter(top_category == "Spectator Sports") %>%
-  select(location_name) %>%
+  dplyr::select(location_name) %>%
   st_as_sf()
 
 casinos.sf <- dat2 %>%
   filter(sub_category == "Casino Hotels") %>%
-  select(location_name) %>%
+  dplyr::select(location_name) %>%
   st_as_sf()
 
 hotels.sf <- dat2 %>%
   filter(sub_category == "Hotels (except Casino Hotels) and Motels") %>%
-  select(location_name) %>%
+  dplyr::select(location_name) %>%
   st_as_sf()
 
 parking.sf <- dat2 %>%
   filter(sub_category == "Parking Lots and Garages") %>%
-  select(location_name) %>%
+  dplyr::select(location_name) %>%
   st_as_sf()
 
 #Philadelphia Features
@@ -1452,29 +1452,29 @@ phl_dist <-
 phl_nhoods <- 
   st_read("https://raw.githubusercontent.com/azavea/geo-data/master/Neighborhoods_Philadelphia/Neighborhoods_Philadelphia.geojson", quiet = TRUE) %>%
   st_transform('ESRI:102728') %>%
-  select(mapname) %>%
-  rename(., neighborhood = mapname)
+  dplyr::select(mapname) %>%
+  dplyr::rename(., neighborhood = mapname)
 
 CenterCity.sf <- phl_dist %>% 
-  select(DIST_NAME) %>%
+  dplyr::select(DIST_NAME) %>%
   filter(DIST_NAME == "Central") %>%
   st_centroid()
 
 CityHall.sf <- 
   dat3 %>% 
-  select(location_name, date_range_start, top_category) %>%
+  dplyr::select(location_name, date_range_start, top_category) %>%
   filter(location_name == "City Hall", date_range_start == "2018-01-01T05:00:00Z")
 
 Temple.sf <- 
   dat3 %>% 
-  select(location_name, date_range_start, top_category) %>%
+  dplyr::select(location_name, date_range_start, top_category) %>%
   filter(location_name == "Temple University", 
          top_category == "Colleges, Universities, and Professional Schools",
          date_range_start == "2018-01-01T05:00:00Z")
 
 UPenn.sf <- 
   dat3 %>% 
-  select(location_name, date_range_start, top_category) %>%
+  dplyr::select(location_name, date_range_start, top_category) %>%
   filter(location_name == "Univ of Penn",
          top_category == "Colleges, Universities, and Professional Schools",
          date_range_start == "2018-01-01T05:00:00Z")
@@ -1482,19 +1482,19 @@ UPenn.sf <-
 septaStops <- 
   rbind(
     st_read("https://opendata.arcgis.com/datasets/8c6e2575c8ad46eb887e6bb35825e1a6_0.geojson", quiet = TRUE) %>% 
-      mutate(Line = "El") %>% 
+      dplyr::mutate(Line = "El") %>% 
       st_transform('ESRI:102728') %>%
-      select(Station, Line),
+      dplyr::select(Station, Line),
     st_read("https://opendata.arcgis.com/datasets/2e9037fd5bef406488ffe5bb67d21312_0.geojson", quiet = TRUE) %>%
-      mutate(Line ="Broad_St") %>%
+      dplyr::mutate(Line ="Broad_St") %>%
       st_transform('ESRI:102728') %>%
-      select(Station, Line)) 
+      dplyr::select(Station, Line)) 
 
 parks <-
   st_read("https://opendata.arcgis.com/datasets/d52445160ab14380a673e5849203eb64_0.geojson", 
           quiet = TRUE) %>%
   st_transform('ESRI:102728') %>%
-  select(PUBLIC_NAME)
+  dplyr::select(PUBLIC_NAME)
 
 phl_building_footprints <-
   st_read("https://opendata.arcgis.com/datasets/ab9e89e1273f445bb265846c90b38a96_0.geojson", 
@@ -1503,7 +1503,7 @@ phl_building_footprints <-
   st_transform('ESRI:102728')
 
 phl_building_footprints <- phl_building_footprints %>%
-  mutate(bld_area_sqft = as.numeric(st_area(phl_building_footprints)),
+  dplyr::mutate(bld_area_sqft = as.numeric(st_area(phl_building_footprints)),
          bld_area_sqmi = as.numeric(st_area(phl_building_footprints)*0.000000035870))
 
 phl_busstop <-
@@ -1534,7 +1534,7 @@ phl_blockgroups <-
           geometry=T, 
           output = "wide") %>%
   st_transform('ESRI:102728')%>%
-  rename(TotalPop = B01003_001E,
+  dplyr::rename(TotalPop = B01003_001E,
          White = B02001_002E,
          MedAge = B01002_001E,
          MedHHInc = B19013_001E,
@@ -1543,7 +1543,7 @@ phl_blockgroups <-
          Black = 	B02001_003E,
          GEOID10 = GEOID) %>%
   dplyr::select(-ends_with("M")) %>%
-  mutate(pctWhite = ((White / TotalPop)*100),
+  dplyr::mutate(pctWhite = ((White / TotalPop)*100),
          pctBlack = ((Black / TotalPop)*100),
          pctHisp = ((Hisp / TotalPop)*100),
          tract_area_mi = as.numeric(st_area(geometry)*0.000000035870),
@@ -1593,7 +1593,7 @@ Finally, this code generates nearest neighbor variables for business by corridor
 # summary(dat_pred)
 dat_pred <-
   dat_pred_temp %>%
-  mutate(total = 1,
+  dplyr::mutate(total = 1,
          bars = ifelse(top_category == 'Drinking Places (Alcoholic Beverages)', 1, 0),
          restaurant = ifelse(top_category == 'Restaurants and Other Eating Places', 1, 0),
          arts = ifelse(top_category == 'Promoters of Performing Arts, Sports, and Similar Events' |
@@ -1742,7 +1742,7 @@ dat_pred_agg <-
             demo_pctHisp_log = log(demo_pctHisp + 1)) %>% 
   # mutate_if(is.numeric, list(~na_if(., Inf))) %>%
   st_drop_geometry() %>%
-  left_join(phl_corridors_pred %>% select(corridor)) %>%
+  left_join(phl_corridors_pred %>% dplyr::select(corridor)) %>%
   drop_na(corridor, demo_MHI, demo_medrent) %>% #Some of the census variables aren't reporting for our block groups
   st_as_sf() %>%
   ungroup() %>%
@@ -1755,7 +1755,7 @@ To improve the model, we've manipulated the dependent variable to normalize the 
 ```{r histograms, out.width = "100%"}
 dat_pred_agg %>%
   st_drop_geometry() %>%
-  select(Night_visits, Night_visits_sqmi, Night_visits_sqmi_log) %>%
+  dplyr::select(Night_visits, Night_visits_sqmi, Night_visits_sqmi_log) %>%
   pivot_longer(., cols = starts_with("Night_visits"), names_to="variable", values_to="value") %>%
   ggplot(aes(value)) +
   geom_histogram() +
@@ -2029,7 +2029,7 @@ reg.vars <- c('Night_visits_sqmi_log',
 reg1 <- 
   lm(Night_visits_sqmi_log ~ ., #change lm to ranger, predictions are a little different
      data = st_drop_geometry(phl.training) %>% 
-       select(reg.vars))
+       dplyr::select(reg.vars))
              
 summary(reg1)
 ```
@@ -2133,7 +2133,7 @@ map_preds <- dat_pred_agg %>%
   group_by(corridor, corr_type) %>% #CONFIRM THIS APPROACH WITH MATT!
   summarise(Night_visits_sqmi = mean(Night_visits_sqmi),
             pred = mean(pred)) %>% 
-  mutate(Visits.AbsError = abs(exp(pred) - Night_visits_sqmi),
+  dplyr::mutate(Visits.AbsError = abs(exp(pred) - Night_visits_sqmi),
          PercentError = (Visits.AbsError / Night_visits_sqmi)*100) 
 
 #Quintile maps
@@ -2254,7 +2254,7 @@ phl.test.sub <- dat_pred_agg_sub[-inTrain.sub,]
 reg1.sub <- 
   lm(Night_visits_sqmi_log ~ ., #change lm to ranger, predictions are a little different
      data = st_drop_geometry(phl.training.sub) %>%
-             select(reg.vars))
+             dplyr::select(reg.vars))
 
 summary(reg1.sub)
 ```
@@ -2266,7 +2266,7 @@ Next we compare the errors in the model removing outliers to the baseline model.
 phl.test.sub <-
   phl.test.sub %>%
   st_drop_geometry() %>%
-  mutate(Regression = "Linear Regression Removing Outliers",
+  dplyr::mutate(Regression = "Linear Regression Removing Outliers",
          Visits.Predict = exp(predict(reg1.sub, phl.test.sub)),
          Visits.Error = Visits.Predict - Night_visits_sqmi,
          Visits.AbsError = abs(Visits.Predict - Night_visits_sqmi),
@@ -2328,7 +2328,7 @@ phl.test.rf <- dat_pred_agg[-inTrain,]
 rf1 <- 
   ranger(Night_visits_sqmi_log ~ ., #change lm to ranger, predictions are a little different
      data = st_drop_geometry(phl.training.rf) %>%
-             select(reg.vars),
+             dplyr::select(reg.vars),
      importance = "impurity")
 
 rf1
@@ -2453,6 +2453,89 @@ rbind(reg1.cv.resample %>% mutate(Regression = "Linear Model"),
        subtitle = "Figure X.X") +
   facet_wrap(~Regression, ncol = 1) +
   plotTheme()
+
+```
+
+### LOGO-CV
+
+```{r}
+dat_pred_cv <-
+  dat_pred_agg %>%
+  dplyr::select(date_range_start, Night_visits, Night_visits_sqmi, phl_area_sqmi, reg.vars) %>%
+  dplyr::mutate(uniqueID = rownames(.),
+                cvID = sample(round(nrow(dat_pred_agg) / 24), size=nrow(dat_pred_agg), replace = TRUE))
+
+colnames(dat_pred_agg)
+
+crossValidate <- function(dataset, id, dependentVariable, indVariables) {
+  
+  allPredictions <- data.frame()
+  cvID_list <- unique(dataset[[id]])
+  
+  for (i in cvID_list) {
+    
+    thisFold <- i
+    cat("This hold out fold is", thisFold, "\n")
+    
+    fold.train <- filter(dataset, dataset[[id]] != thisFold) %>% as.data.frame() %>% 
+      dplyr::select(id, geometry, indVariables, dependentVariable)
+    fold.test  <- filter(dataset, dataset[[id]] == thisFold) %>% as.data.frame() %>% 
+      dplyr::select(id, geometry, indVariables, dependentVariable)
+    
+    regression <-
+      glm(Night_visits_sqmi_log ~ ., family = "poisson", 
+          data = fold.train %>% 
+            dplyr::select(-geometry, -id))
+    
+    thisPrediction <- 
+      mutate(fold.test, Prediction = predict(regression, fold.test, type = "response"))
+    
+    allPredictions <-
+      rbind(allPredictions, thisPrediction)
+    
+  }
+  return(st_sf(allPredictions))
+}
+
+# reg.rf.cv <- 
+#   crossValidate(
+#   dataset = dat_pred_cv,
+#   id = "cvID",
+#   dependentVariable = "Night_visits_sqmi_log",
+#   indVariables = reg.vars) %>%
+#     dplyr::select(cvID = cvID, Night_visits_sqmi_log, Prediction, geometry)
+  
+reg.rf.date.CV <- 
+  crossValidate(
+    dataset = dat_pred_cv,
+    id = "date_range_start",
+    dependentVariable = "Night_visits_sqmi_log",
+    indVariables = reg.vars)
+
+reg.rf.date.CV <-
+  cbind(reg.rf.date.CV, dat_pred_cv %>% dplyr::select(Night_visits, Night_visits_sqmi, phl_area_sqmi)) %>%
+  dplyr::select(date_range_start, 
+                Night_visits_sqmi,
+                Night_visits_sqmi_log,
+                Night_visits, 
+                phl_area_sqmi, 
+                Prediction, 
+                geometry) %>%
+  dplyr::mutate(Prediction = exp(Prediction),
+                Prediction = Prediction * phl_area_sqmi,
+                Error = Prediction - Night_visits,
+                Abs.Error = abs(Error),
+                MAPE = Abs.Error / Night_visits)
+
+reg.rf.date.CV %>%
+  st_drop_geometry() %>%
+  dplyr::mutate(Month = date_range_start) %>%
+  group_by(Month) %>%
+  summarize(MAE = mean(Abs.Error),
+            MAPE = mean(MAPE)) %>%
+  kable() %>%
+  kable_styling("striped", full_width = F)
+
 
 ```
 
@@ -2662,36 +2745,132 @@ rbind(phl.test, phl.test.sub, phl.test.rf.sub, phl.test.rf, phl.test.day, phl.te
   kable(caption = "MAE and MAPE for Test Set Data") %>% kable_styling()
 ```
 
+### Tuning Hyperparameters
+
+```{r set up}
+#Package installs -------------------------------------------------------------
+load.fun <- function(x) { 
+  x <- as.character(x) 
+  if(isTRUE(x %in% .packages(all.available=TRUE))) { 
+    eval(parse(text=paste("require(", x, ")", sep=""))) 
+    print(paste(c(x, " : already installed; requiring"), collapse=''))
+  } else { 
+    #update.packages()
+    print(paste(c(x, " : not installed; installing"), collapse=''))
+    eval(parse(text=paste("install.packages('", x, "')", sep=""))) 
+    print(paste(c(x, " : installed and requiring"), collapse=''))
+    eval(parse(text=paste("require(", x, ")", sep=""))) 
+  } 
+} 
+
+########### Required Packages ###########
+packages = c("bayesplot", "lme4", "rstan", "shinystan", "RcppEigen",
+             "tidyverse", "tidyr", "AmesHousing", "broom", "caret", "dials", "doParallel", "e1071", "earth",
+             "ggrepel", "glmnet", "ipred", "klaR", "kknn", "pROC", "rpart", "randomForest",
+             "sessioninfo", "tidymodels","ranger", "recipes", "workflows", "themis","xgboost",
+             "sf", "nngeo", "mapview")
+
+for(i in seq_along(packages)){
+  packge <- as.character(packages[i])
+  load.fun(packge)
+}
+```
+
+```{r}
+set.seed(414)
+data_split <- initial_split(dat_pred_agg, strata = "Night_visits_sqmi_log", prop = 0.60)
+
+model_rec <- recipe(Night_visits_sqmi_log ~ ., data = phl.training.rf %>% 
+                      dplyr::select(reg.vars) %>% 
+                      st_drop_geometry())
+
+#Splitting by date - does that make sense?
+cv_splits_date <- group_vfold_cv(phl.training.rf%>% 
+                      dplyr::select(date_range_start, reg.vars) %>% 
+                      st_drop_geometry(),  
+                      strata = "Night_visits_sqmi_log", 
+                      group = "date_range_start")
+
+rf_plan <- rand_forest() %>%
+  set_args(mtry  = tune()) %>%
+  set_args(min_n = tune()) %>%
+  set_args(trees = 1000) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("regression")
+
+#Question for Matt - how do I know the right values to try here?
+rf_grid <- expand.grid(mtry = c(2,5), 
+                       min_n = c(1,5))
+
+rf_wf <-
+  workflow() %>% 
+  add_recipe(model_rec) %>% 
+  add_model(rf_plan)
+
+control <- control_resamples(save_pred = TRUE, verbose = TRUE)
+
+rf_tuned <- rf_wf %>%
+  tune::tune_grid(.,
+                  resamples = cv_splits_date,
+                  grid      = rf_grid,
+                  control   = control,
+                  metrics   = metric_set(rmse, rsq))
+
+show_best(rf_tuned, metric = "rmse", n = 15)
+
+rf_best_params  <- select_best(rf_tuned, metric = "rmse")
+
+rf_best_wf <- finalize_workflow(rf_wf, rf_best_params)
+
+rf_val_fit_date <- rf_best_wf %>% 
+  last_fit(split     = data_split,
+           control   = control,
+           metrics   = metric_set(rmse, rsq))
+```
+
 # 5. App Development
 
 ```{r scenario predictions}
+dat_scenario <-
+  dat_pred %>%
+  group_by(corridor, date_range_start) %>%
+  summarize(restaurants = sum(restaurant, na.rm = TRUE) + 1,
+            bars = sum(bars, na.rm = TRUE) + 1,
+            arts = sum(arts, na.rm = TRUE) + 1) %>%
+  st_drop_geometry() %>%
+  left_join(dat_pred_agg) %>%
+  group_by(corridor) 
+
 #Scenario 1 - Increase of restaurants by 25%
 scenario1 <-
-  dat_pred_agg %>%
-  mutate(count_rest_a = count_rest_a*1.25, #Confirm that this operation works
+  dat_scenario %>%
+  mutate(restaurants = restaurants * 1.1 , 
+         count_rest_a = restaurants/phl_area_sqmi, #Confirm that this operation works
          count_rest_a_log = log(count_rest_a))
-scenario1.preds <- predict(rf1, data = st_drop_geometry(scenario1))
+scenario1.preds <- predict(rf1, data = scenario1)
 scenario1.preds <- exp(scenario1.preds$predictions)
 
 #Scenario 2 - Decrease of restaurants by 25%
 scenario2 <-
-  dat_pred_agg %>%
-  mutate(count_rest_a = count_rest_a*.75,
+  dat_scenario %>%
+  mutate(restaurants = restaurants *.9,
+         count_rest_a = restaurants/phl_area_sqmi,
          count_rest_a_log = log(count_rest_a))
 scenario2.preds <- predict(rf1, data = st_drop_geometry(scenario2))
 scenario2.preds <- exp(scenario2.preds$predictions)
 
 #Scenario 3 - Increase of bars by 25%
 scenario3 <-
-  dat_pred_agg %>%
-  mutate(count_bars_a = count_bars_a*1.25,
+  dat_scenario %>%
+  mutate(bars = bars *1.1,
+         count_bars_a = bars/phl_area_sqmi,
          count_bars_a_log = log(count_bars_a))
 scenario3.preds <- predict(rf1, data = st_drop_geometry(scenario3))
 scenario3.preds <- exp(scenario3.preds$predictions)
 
 #Scenario 2 - Decrease of bars by 25%
 scenario4 <-
-  dat_pred_agg %>%
+  dat_scenario %>%
   mutate(count_bars_a = count_bars_a*.75,
          count_bars_a_log = log(count_bars_a))
 scenario4.preds <- predict(rf1, data = st_drop_geometry(scenario4))
@@ -2714,9 +2893,12 @@ Scenario_preds <-
   mutate(PctChange.1 = (Preds.1 - Night_visits)/Preds.1,
          PctChange.2 = (Preds.2 - Night_visits)/Preds.2,
          PctChange.3 = (Preds.3 - Night_visits)/Preds.3,
-         PctChange.4 = (Preds.4 - Night_visits)/Preds.4)
+         PctChange.4 = (Preds.4 - Night_visits)/Preds.4) 
 
-Scenario_preds
+ggplot(Scenario_preds, aes(x =Night_visits)) +
+  geom_histogram()
+
+
 
 #Questions:
 #Finalize the different scenarios that we want to show.
@@ -2724,6 +2906,8 @@ Scenario_preds
 #What do we do with predictions that don't make any sense? How do we measure this?
 #Currently this predicts for each month. Do we want this? Do we want to aggregate up so there's only one prediction per corridor?
 ```
+
+
 # 6. Next Steps
 
 For next week, we will primarily focus on preparing our presentation by doing the following:
