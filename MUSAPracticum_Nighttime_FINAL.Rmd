@@ -7,16 +7,13 @@ output:
         code_folding: hide
         toc: true
         toc_float: true
-editor_options: 
-  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
 	echo = FALSE,
 	message = FALSE,
-	warning = FALSE,
-	out.width = "100%"
+	warning = FALSE
 )
 ```
 
@@ -217,19 +214,18 @@ This project is part of the Spring 2021 [Master of Urban Spatial Analytics Pract
 Finally we want to acknowledge the support and feedback from our classmates in the MUSA and city planning programs at the University of Pennsylvania. We thank you for your help!
 
 ## 1.1 Abstract
-This project studies nightlife mobility patterns in Philadelphia, Pennsylvania and develops a web aplication that predicts nightlife traffic to commercial corridors based on retail mix. This document provides an overview of the key takeaways from our analysis as well as an appendix at the end of the document including the code to replicate this analysis.
+This project studies nightlife mobility patterns in Philadelphia, Pennsylvania and develops a web application that predicts nightlife traffic to commercial corridors based on retail mix. This document provides an overview of the key takeaways from our analysis as well as an appendix at the end of the document including the code to replicate this analysis.
 
-While nighttime activity is an important component to Philadelphia's economy, culture, and identity, there is limited empirical data available to help decisionmakers govern the nighttime economy. As a resulting, many of the logistical and policy decisions are largely based on emotional perceptions of the negative externalities of the nighttime economy, such as noise pollution and safety concerns. This project uses the novel SafeGraph dataset to analyze nighttime mobility patterns in Philadelphia and develop a model to predict nighttime trips to commercial corridors. Our model utilizes a variety of factors including retail mix, built environment features, and demographic data. Our findings indicate that changing the corridor retail mix impacts traffic during evening hours. Additionally, our research provides new quantitative insights into behavior of visitors during nighttime hours in Philadelphia which have important implications for economic development in the city, particuarly in the post COVID-19 climate.
+While nighttime activity is an important component to Philadelphia's economy, culture, and identity, there is limited empirical data available to help decision makers govern the nighttime economy. As a resulting, many of the logistical and policy decisions are largely based on emotional perceptions of the negative externalities of the nighttime economy, such as noise pollution and safety concerns. This project uses the novel SafeGraph dataset to analyze nighttime mobility patterns in Philadelphia and develop a model to predict nighttime trips to commercial corridors. Our model utilizes a variety of factors including retail mix, built environment features, and demographic data. Our findings indicate that changing the corridor retail mix impacts traffic during evening hours. Additionally, our research provides new quantitative insights into behavior of visitors during nighttime hours in Philadelphia which have important implications for economic development in the city, particularly in the post COVID-19 climate.
 
 ## 1.2 Motivation
 
-Broadly defined as economic activity that takes place during the evening hours and centered around food, drink and entertainment, the nighttime economy is an important component for any vibrant city. Philadelphia, the focus of this study, has a dynamic nightlife economy that features a dynamic arts and culture scene. In 2017, The Philadelphia Cultural Alliance estimated that [arts and culture in the city has a total economic impact of over $4 billion in the region](https://www.philaculture.org/why-arts-culture/prosperity). Philadelphia is also home to a renowned selection of restaurants that also have an important economic impact on the city. [A 2019 report by the Economy League of Greater Philadelphia and the Philadelphia Department of Public Health](https://economyleague.org/uploads/files/4171470634539374-goodeats-finalreport.pdf) estimated that food jobs account for 12% of all jobs in the city and food related businesses acount for 18% of all firms. These sectors are clearly and important piece of the wider economy with much of their activity and business taking place during the evening hours.
+Broadly defined as economic activity that takes place during the evening hours and centered around food, drink and entertainment, the nighttime economy is an important component for any vibrant city. Philadelphia, the focus of this study, has a dynamic nightlife economy that features a dynamic arts and culture scene. In 2017, The Philadelphia Cultural Alliance estimated that [arts and culture in the city has a total economic impact of over $4 billion in the region](https://www.philaculture.org/why-arts-culture/prosperity). Philadelphia is also home to a renowned selection of restaurants that also have an important economic impact on the city. [A 2019 report by the Economy League of Greater Philadelphia and the Philadelphia Department of Public Health](https://economyleague.org/uploads/files/4171470634539374-goodeats-finalreport.pdf) estimated that food jobs account for 12% of all jobs in the city and food related businesses account for 18% of all firms. These sectors are clearly and important piece of the wider economy with much of their activity and business taking place during the evening hours.
 
-Despite Philadelphia's nighttime economy being both culturally and economically important to the city, there is relatively limited knowledge of the nighttime economy's impact at the neighborhoood or corridor scale. As many policy and logisitcal decisions governing the nighttime economy are drawn from perceptions of its negative externalities, such as noise pollution and safety concerns, there is a lack of data explaining the positive effects of the nighttime economy at this hyper-local level. Therefore, a key motivation of this project is to better understand how the nighttime economy contributes to corridor traffic, which we understand as a proxy for local economic activity. We hope that this research will help policy makers better weigh the costs and benefits when making decisions governing the nighttime economy.
+Despite Philadelphia's nighttime economy being both culturally and economically important to the city, there is relatively limited knowledge of the nighttime economy's impact at the neighborhood or corridor scale. As many policy and logistical decisions governing the nighttime economy are drawn from perceptions of its negative externalities, such as noise pollution and safety concerns, there is a lack of data explaining the positive effects of the nighttime economy at this hyper-local level. Therefore, a key motivation of this project is to better understand how the nighttime economy contributes to corridor traffic, which we understand as a proxy for local economic activity. We hope that this research will help policy makers better weigh the costs and benefits when making decisions governing the nighttime economy.
 
-A separate motivation for this project comes from the unprecedented economic shock of the COVID-19 pandemic beginning in March 2020 and continuing through the release of this report. As shown in the below Figure X.X, traffic to restaurants, bars and arts establishments have decreased by about 50% compared to 2018 measurements. While the days of the pandemic apear to wane in Philadelphia, there is still much uncertainty about how these esablishments will rebound from this unprecedented shock. As these business types that are integral to the nighttime economy largely depend on gathering large groups of people indoors, it is important to economic development professionals in Philadelphia have a deep understanding how the possible benefits of investing in this sector to help aid the city and local businesses from rebounding from this devasting economic event.
-
-```{r COVID, echo=FALSE}
+A separate motivation for this project comes from the unprecedented economic shock of the COVID-19 pandemic beginning in March 2020 and continuing through the lifespan of this project in Spring 2021. As shown in the below Figure 1.1, traffic to restaurants, bars, and arts establishments have decreased by about 50% compared to 2018 measurements. While the days of the pandemic are appearing to wane in Philadelphia, there is still much uncertainty about how these establishments will rebound from this unprecedented shock. As these business types that are integral to the nighttime economy largely depend on gathering large groups of people indoors, it is important to economic development professionals in Philadelphia have a deep understanding how the possible benefits of investing in the nighttime economy can benefit the city's broader economy and help the city rebound from the pandemic.
+```{r COVID, echo=TRUE}
 dat_2018 <- 
   dat %>% 
   mutate(popularity_by_hour = str_remove_all(popularity_by_hour, pattern = "\\[|\\]")) %>% #remove brackets
@@ -348,13 +344,13 @@ rbind(
   scale_x_discrete(name ="Month")+  
   scale_y_continuous(name ="Percent Change") +
   labs(title = "Philadelphia Commercial Trip % Change, 2018 & 2020",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 1.1") +
   plotTheme()
 ```
 
 ## 1.3 Use Case
 
-Our goal is to help business improvement districts (BIDs) and economic development professionals understand nightlife patterns across Philadelphia’s commercial corridors. Not only do we believe this insight will provide valuable and interesting findings that will deepen the understanding of evening traffic patterns, but also that this can help further recovery efforts following the COVID-19 pandemic. While we believe that there are many potential applications for this work, we envisioned the following speciifc uses for our research, analysis, and web application.
+Our goal is to help business improvement districts (BIDs) and economic development professionals understand nightlife patterns across Philadelphia’s commercial corridors. Not only do we believe this insight will provide valuable and interesting findings that will deepen the understanding of evening traffic patterns, but also that this can help further recovery efforts following the COVID-19 pandemic. While we believe that there are many potential applications for this work, we envisioned the following specific uses for our research, analysis, and web application.
 
 * Understand relative popularity of commercial corridors to inform decisions to grant licenses or small business assistance.
 * Understand origins and demographics of visitors to more effectively target marketing resources. 
@@ -362,7 +358,7 @@ Our goal is to help business improvement districts (BIDs) and economic developme
 
 ## 1.4 Summary of Methodology
 
-In this study, we use a combination of public and private datasets to study nighttime trends across commercial corridors in Philadelphia. Our model predicts trips between the hours of 7PM and 12AM at the corridor level. After an iterative process of feature engineering, we built a model that ultimately combined features from Safegraph, the built environment, and demographic data. Ultimately, we embed this model into a [web application](*ADD URL HERE*) that allows users to understand the impact a corridor's retail mix on the evening trip traffic. While the model has limited accuracy and generalizability indicating that it requires continual calibration, this proof-of-concept web application is an important step in making informed, data-driven policy decisions in the nighttime economy.
+In this study, we use a combination of public and private datasets to study nighttime trends across commercial corridors in Philadelphia. Our model predicts trips between the hours of 7PM and 12AM at the corridor level. After an iterative process of feature engineering, we built a model that ultimately combined features from SafeGraph, the built environment, and demographic data. Ultimately, we embed this model into a [web application](*ADD URL HERE*) that allows users to understand the impact a corridor's retail mix on the evening trip traffic. While the model has limited accuracy and generalizability indicating that it requires continual calibration, this proof-of-concept web application is an important step in making informed, data-driven policy decisions in the nighttime economy.
 
 This document walks through our model-building process in detail and includes relevant code to replicate our analysis. This code is available in the appendix at the end of the document.
 
@@ -370,7 +366,7 @@ This document walks through our model-building process in detail and includes re
 
 ## 2.1 The SafeGraph Dataset
 
-SafeGraph is a novel data source that uses anonymized cell phone GPS data to record trips to commercial points of interest. For this project, we used two datasets from SafeGraph: the Monthly Patterns dataset and the Places dataset. For a given point of interest, the Monthly Patterns dataset tells us detailed infomration on the montly traffic patterns, such as the number of trips and visitors, the median distance travelled, the median time spent at the establishment, and the origin census block group. Complementing the Patterns dataset, the Places dataset provides detailed information about the given point of interest, including the business category, the hours open, business hours and other descriptive tags to help categorize the place.
+SafeGraph is a novel data source that uses anonymized cell phone GPS data to record trips to commercial points of interest. For this project, we used two datasets from SafeGraph: the Monthly Patterns dataset and the Places dataset. For a given point of interest, the Monthly Patterns dataset tells us detailed information on the monthly traffic patterns, such as the number of trips and visitors, the median distance traveled, the median time spent at the establishment, and the origin census block group. Complementing the Patterns dataset, the Places dataset provides detailed information about the given point of interest, including the business category, the hours open, business hours and other descriptive tags to help categorize the place.
 
 The SafeGraph data are brand new and have numerous unexplored applications and insights. The dataset was essential to this project as it allowed us to see trip patterns with unprecedented detail and [far higher accuracy](https://www.safegraph.com/home2?utm_campaign=branded_exact&utm_term=safegraph&rm_ci=8481213813&rm_gid=88800951800&utm_medium=cpc&utm_source=google&utm_content=493407744937&utm_term=safegraph&rm_kw=safegraph&rm_mt=e&rm_n=g&rm_cr=493407744937device=c&creative=493407744937&placement=&gclid=Cj0KCQjw4cOEBhDMARIsAA3XDRh1mi035mxENy-peI5SMcH2K8moBuUyS0tonTvV9kOEO_7ybGvbIfcaAsSZEALw_wcB) than other mobility datasets. While SafeGraph is undoubtedly the cutting edge of mobility data, we encountered some limitations. Primarily, as the data is based on GPS data, it is inherently noisy with trips incorrectly attributed to certain points of interest. For example, if someone is waiting for a bus outside of an establishment, this may be recorded in the data as a trip to the establishment. In dense urban areas where points of interest may be located on multiple floors of the same building or in close proximity to one another, this may result in inaccurate counts across the dataset.
 
@@ -378,13 +374,13 @@ Separately, a substantial part of our app analyzes who many trips come from a gi
 
 ## 2.2 Other Sources
 
-We also used data from [Open Data Philly](https://www.opendataphilly.org/) to capture features in the built environment such as transit, park space, and building size. The dataset we used are summarized in the below table. While these features are relatively standard datasets, replicatng this analysis and model for other citys would require that they have similar sources available.
+We also used data from [Open Data Philly](https://www.opendataphilly.org/) to capture features in the built environment such as transit, park space, and building size. The dataset we used are summarized in the below table. While these features are relatively standard datasets, replicating this analysis and model for other cities would require that they have similar sources available.
 
-Finally, we used 2018 American Community Survey 5-Year Estimates to describe demographic data for each corridor
+Finally, we used 2018 American Community Survey 5-Year Estimates to describe demographic data for each corridor.
 
 ## 2.3 Philadelphia Commercial Corridors
 
-As our model predicts nighttime trips at the commercial corridor level, we relied heavily on a shapefile from the City of Philadelphia's Planning department which demarcates individual corridors and districts throughout the city. According to the [available metadata](https://metadata.phila.gov/#home/datasetdetails/564236a55737e1f263ae5e3f/representationdetails/56423a4e902dbdd813db9a55/) "locations range from large, regional and specialty destinations to corridors that reflect the evolving economy, culture, and aesthetic traditions of surrounding neighborhoods." We also use the administrative corridor categories defined in the dataset. a description of these cateogries is included below
+As our model predicts nighttime trips at the commercial corridor level, we relied heavily on a shapefile from the City of Philadelphia's Planning department which demarcates individual corridors and districts throughout the city. According to the [available metadata](https://metadata.phila.gov/#home/datasetdetails/564236a55737e1f263ae5e3f/representationdetails/56423a4e902dbdd813db9a55/) "locations range from large, regional and specialty destinations to corridors that reflect the evolving economy, culture, and aesthetic traditions of surrounding neighborhoods." We also use the administrative corridor categories defined in the dataset. a description of these categories is included below
 
 Corridor Type | Gross Leasable Area | Store Types
 ------------- | --------------------|-------------
@@ -395,7 +391,7 @@ Regional Center | 300,000 - 900,000+ sq.ft. | One or two full-line department st
 Superregional Center | 500,000 - 2,000,000+ sq.ft. | Three or more full-line department stores or equivalent
 Specialty Center | N/A | Specialty goods or services, dining, bars, amusements, arts, etc.
 
-Figure X.X shows the different types of commercial corridors based on classification by Philadelphia.
+Figure 2.1 shows the different types of commercial corridors based on classification by Philadelphia.
 ```{r echo=FALSE}
 phl_corridors %>%
   drop_na(corr_type) %>%
@@ -418,9 +414,9 @@ phl_corridors %>%
   scale_fill_viridis_d() +
   scale_color_viridis_d()+
   labs(title = "Philadelphia Corridor Typologies",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 2.1") +
   mapTheme() +
-  theme(legend.position = "bottom",
+  theme(legend.position = "right",
         legend.title = element_blank())
 ```
 
@@ -430,25 +426,24 @@ Before explaining the model building process, it is important to understand the 
 
 Key findings from the below analysis include:
 
-* While we primarily examine retaurants, bars, and arts establishments as the key business types that contribute to the nighttime economy, all three business types in Philadelphia generate traffic during all hours of the day. 
-* COVID-19 has caused a drastic decrease in business traffic to the businesses we consider nightlife establishments. While the data indicate that arts establishments across Philadelphia were able to recover some of the loss towards the end of 2020, bars and restaurants maintained over a 50% decrease in traffic. This could be related to the relatively high risk associated with frequenting these establishment types.
-* Of the six corridor types defined above, Regional and Superregional Centers have the highest share of traffic during the workday. Smaller corridors outside the central core of Philadelphia tend ot have a higher share of evening and early morning traffic. This suggests that people leave Center City outside of working hours.
-* The volume of trips varies by corridor type. Regional and Superregional Centers tend to draw a higher volume of travellers, while the smaller neighborhood corridors draw fewer visitors. Community Centers and Specialty Centers fall somewhere in the middle.
-* People travel further to the Center City area.
+* While we primarily examine *restaurants, bars, and arts venues* as the key business types that contribute to the nighttime economy, all three business types in Philadelphia generate traffic during all hours of the day. 
+* *COVID-19* has caused a drastic decrease in business traffic to the businesses we consider nightlife establishments. While the data indicate that arts establishments across Philadelphia were able to recover some of the loss towards the end of 2020, bars and restaurants maintained over a 50% decrease in traffic throughout the end of the year. This could be related to the relatively high risk associated with frequenting these establishment types.
+* Of the total daily traffic frequenting commercial corridors across the city, Regional and Superregional Centers have the *highest share of traffic during the workday*. Smaller corridors outside the central core of Philadelphia tend to have a higher share of evening and early morning traffic. This suggests that *visitors leave Center City outside of working hours*.
+* *The volume of trips varies by corridor type*. Regional and Superregional Centers tend to draw a higher volume of travelers, while the smaller neighborhood corridors draw fewer visitors. Community Centers and Specialty Centers fall somewhere in the middle.
+* People travel further distances to reach the Center City area.
 
 ## 3.1 Philadelphia Nightlife Establishments
 
-Our first research question is where Philadelphia nightlife establishments are located across the city. The following maps indicate where businesses that contribute to the city's nightlife economy are located. The categories include:
+First, we are curious to see where Philadelphia nightlife establishments are located across the city. The following maps indicate where businesses that contribute to the city's nightlife economy are located. The categories include:
 
 * Bars
 * Restaurants 
 * Arts Venues
 
-Figure X.X below shows the spatial patterns of the business categories. Bars and restaurants represent the highest number of businesses which are spread across the city. Hotels are mostly clustered in the central district of the city and near the airport in the southwest portion of the city. There are far fewer casinos and arts venues.
+Figure 3.1.1 below shows the spatial patterns of the business categories. Bars and restaurants represent the highest number of businesses which are spread across the city. Hotels are mostly clustered in the central district of the city and near the airport in the southwest portion of the city. There are far fewer casinos and arts venues.
 
 Throughout the analysis, we pay special attention to bars and restaurants, as these organizations are well distributed throughout the city and apply to a local Philadelphia customer base.
-
-```{r establishment locations, echo=FALSE}
+```{r establishment locations, echo=TRUE}
 dat2 %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)" |
            top_category == "Restaurants and Other Eating Places" |
@@ -462,13 +457,13 @@ dat2 %>%
   geom_sf(data = phl_cbg, fill = "grey80", color = "transparent") +
   geom_sf(color = "red", size = .1) +
   labs(title = "Location of Nightlife Establishments",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.1.1") +
   facet_wrap(~category, nrow = 1) +
   mapTheme()
 ```
 
-To look at the spatial distribution of business types another way, we review the distribution of businesses with a fishnet grid. The fishnet allows us to visualize clusters of each business type, as clusters are aggregated to the individual cell level. This allows us to more effectively see the density of these business types more effectively than the above Figure X.X. While all three business types are mostly concentrated within Center City, the below Figure X.X demonstrates how restaurants are most thoroughly distributed throughout Philadelphia. 
-```{r unnesting hour dataset, echo=FALSE}
+To look at the spatial distribution of business types another way, we review the distribution of businesses with a fishnet grid. The fishnet allows us to visualize clusters of each business type, as clusters are aggregated to the individual cell level. This allows us to more effectively see the density of these business types more effectively than the above Figure 3.1.2. While all three business types are mostly concentrated within Center City, the below Figure X.X demonstrates how restaurants are most thoroughly distributed throughout Philadelphia. 
+```{r unnesting hour dataset, echo=TRUE}
 fishnet <- 
   st_make_grid(phl_boundary, cellsize = 1000, square = FALSE) %>%
   .[phl_boundary] %>% 
@@ -552,11 +547,11 @@ for(i in vars){
       mapTheme()}
 
 do.call(grid.arrange, c(mapList, 
-                        ncol=3, top="Count of Nightlife Businesses per Fishnet", 
-                        bottom = "Figure X.X"))
+                        ncol=1, top="Count of Nightlife Businesses per Fishnet", 
+                        bottom = "Figure 3.1.2"))
 ```
 
-Figure X.X below breaks down the density of restaunts in a given corridor.  While centralized corridors tend to have more restaurants per square mile other smaller corridors in the city indicate a high concentration of restaurants as well. 
+Figure 3.1.3 below breaks down the density of restaurants in a given corridor.  While centralized corridors tend to have more restaurants per square mile other smaller corridors in the city indicate a high concentration of restaurants as well. 
 ```{r}
 st_join(phl_corridors, restaurants) %>%
   group_by(NAME.x) %>%
@@ -570,11 +565,11 @@ st_join(phl_corridors, restaurants) %>%
   scale_fill_viridis(trans = "sqrt",
                      name = "Count Per Sq. Mi.") +
   labs(title = "Restaurant Density by Commercial Corridor",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.1.3") +
   mapTheme() 
 ```
 
-Similar to the above, Figure X.X shows the density of bars along each commercial corridor. Again, we see the corridors around Center City generally showing a higher concentration of bars. Distinct from the restaurant density map in Figure X.X above, there seem to be many more corridors with a low density of bars. 
+Similar to the above, Figure 3.1.4 shows the density of bars along each commercial corridor. Again, we see the corridors around Center City generally showing a higher concentration of this business category. Distinct from the restaurant density map in Figure X.X above, there seem to be many more corridors with a low density of bars, particularly moving further away from the city's central core. 
 ```{r Bars by corridor, echo=FALSE}
 st_join(phl_corridors, bars) %>%
   group_by(NAME.x) %>%
@@ -588,11 +583,11 @@ st_join(phl_corridors, bars) %>%
   scale_fill_viridis(trans = "sqrt",
                      name = "Count Per Sq. Mi.") +
   labs(title = "Bar Density by Commercial Corridor",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.1.4") +
   mapTheme() 
 ```
 
-Finally, Figure X.X below shows the density of arts venues by commercial corridor. The majority of corridors have a very low density of performing arts establishments as there are fewer destinations across the city.
+Finally, Figure 3.1.5 below shows the density of arts venues by commercial corridor. The majority of corridors have a very low density of performing arts establishments as there are fewer destinations within this category across the city.
 ```{r echo=FALSE}
 st_join(phl_corridors, performingarts) %>%
   group_by(NAME.x) %>%
@@ -606,14 +601,14 @@ st_join(phl_corridors, performingarts) %>%
   scale_fill_viridis(trans = "sqrt",
                      name = "Count Per Sq. Mi.") +
   labs(title = "Arts Venue Density by Commercial Corridor",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.1.5") +
   mapTheme() 
 ```
 
 ## 3.2 The Impacts of COVID-19 on Nightlife Establishments & Commercial Corridors
 
-Now that we have investigated the distribution of nightlife establishments across Philadelphia, it is important to understand how these establishments have been impacted by theCOVID-19 pandemic. Using SafeGraph data, we are able to see that the pandemic has a drastic impact in foot traffic across sectors and space, though not necessarily evenly.
-```{r data wrangling for COVID-19, include=FALSE}
+Now that we have investigated the distribution of nightlife establishments across Philadelphia, it is important to understand how these establishments have been impacted by the COVID-19 pandemic. Using SafeGraph data, we are able to see that the pandemic has a drastic impact in foot traffic across sectors and space, though not necessarily evenly. First, we observe citywide changes in foot traffic over the course of the pandemic in the below Figure 3.2.1. Comparing 2020 traffic to our 2018 dataset, we see that traffic across the city drastically decreased in March 2020 and represented less then half of the 2018 traffic. This trend continued throughout the year.
+```{r data wrangling for COVID-19, echo=TRUE}
 # # Modify 2018 data
 # dat_2018 <- 
 #   dat %>% 
@@ -691,20 +686,6 @@ Now that we have investigated the distribution of nightlife establishments acros
 #   left_join(., phila, by = "safegraph_place_id") %>% 
 #   st_as_sf() %>%
 #   st_transform('ESRI:102728') 
-```
-
-First, we observe citywide changes in foot traffic over the course of the pandemic. Comparing 2020 traffic to our 2018 dataset, we see that traffic across the city drastically decreased in March 2020 and represented less then half of the 2018 traffic. This trend continued thorughout the year.
-```{r echo=FALSE}
-#Citywide nighttime visits
-# dat_citywide <- dat_join %>%
-#   filter(top_category == "Drinking Places (Alcoholic Beverages)" |
-#            top_category == "Restaurants and Other Eating Places" |
-#            top_category == "Promoters of Performing Arts, Sports, and Similar Events" |
-#            top_category == "Performing Arts Companies") %>%
-#   group_by(month) %>%
-#   summarize(Total_Visits2018 = sum(NightVisits2018),
-#             Total_Visits2020 = sum(NightVisits2020)) %>%
-#   mutate(Percent_Change = (Total_Visits2020 - Total_Visits2018)/Total_Visits2018*100)
 
 #Plot citywide chart
 dat_citywide %>%
@@ -713,12 +694,12 @@ ggplot(., aes(x = month, y = Percent_Change, fill = Percent_Change)) +
   scale_fill_viridis_c() +
   # scale_fill_distiller(palette="viridis", direction = 1) +
   labs(title = "Philadelphia Commercial Trip % Change, 2018 & 2020",
-       subtitle = "Figure X.X", y = "Percent Change", x = "Month") +
+       subtitle = "Figure 3.2.1", y = "Percent Change", x = "Month") +
   plotTheme() 
 ```
 
-The next graphics splits out the percent change in traffic by the business types relevant to our nightlife study: arts establishments, bars, and restaurants. The data show arts establishments were able recover some of its traffic towards the end of 2020. Bars and restaurants, on the other hand, suffered the decreased traffic volumes throughout the end of the year. One possible explanation for this trend is that it may be more likely for arts establishments to hold programming while adhering to COVID-19 safety standards (e.g. mask-wearing and social distancing). Restaurants and bars in Philadelphia, are often in smaller spaces and require that visitors remove masks to partake in the experience. 
-```{r echo=FALSE}
+The next graphics splits out the percent change in traffic by the business types relevant to our nightlife study: arts venues, bars, and restaurants. The data show arts establishments were able recover some of their traffic towards the end of 2020. Bars and restaurants, on the other hand, suffered the decreased traffic volumes throughout the end of the year. One possible explanation for this trend is that it may be more likely for arts establishments to hold programming while adhering to COVID-19 safety standards (e.g. mask-wearing and social distancing). Restaurants and bars in Philadelphia, are often in smaller spaces and require that visitors remove masks to partake in the experience. 
+```{r echo=TRUE}
 #Separate by commercial use  
 dat_citywide2 <- dat_join %>%
     filter(top_category == "Drinking Places (Alcoholic Beverages)" |
@@ -741,14 +722,13 @@ dat_citywide2 %>%
   labs(title = "Philadelphia Commercial Trip % Change, 2018 & 2020",
        subtitle = "Figure X.X") +
   scale_fill_viridis_c() +
-  # scale_fill_distiller(palette="PiYG", direction = 1) +
   facet_wrap(~category) +
   plotTheme() +
   theme(legend.position = "bottom")
 ```
 
-In addition to looking at traffic by business type, the data allows us to view change in business traffic across space. The below Figure X.X shows the change in census block group traffic where the three business types are located. Dark grey areas indicate that no place that fits the business category is location in that census block group. While there are a few exceptions, almost all block groups show a sharp decrease in business traffic, many by well over 50%. The following Figure X.X aggregates the change in traffic across all nightlife business categories, underscoring the drastic economic impact the pandemic has had on businesses across the city.
-```{r echo=FALSE}
+In addition to looking at traffic by business type, the data allows us to view change in business traffic across space. The following Figure X.X aggregates the change in traffic across all nightlife business categories, underscoring the drastic economic impact the pandemic has had on businesses across the cit. Dark grey areas indicate census block groups where none of the three nighttime economy business category is located. While there are a few exceptions, almost all block groups show a sharp decrease in business traffic, many by well over 50%. 
+```{r echo=TRUE}
 # dat_join %>%
 #   filter(top_category == "Drinking Places (Alcoholic Beverages)" |
 #              top_category == "Restaurants and Other Eating Places" |
@@ -800,12 +780,13 @@ dat_night %>%
   geom_sf(data = phl_boundary, fill = "grey20", color = "black")+
   geom_sf(aes(fill = percent_change), color = "transparent") + 
   scale_fill_distiller(palette="RdYlGn", direction = 1) +
-  labs(title = "Nightlife Trip % Change, 2018 & 2020") +
+  labs(title = "Nightlife Trip % Change, 2018 & 2020",
+       subtitle = "Figure 3.2.2") +
   mapTheme()
 ```
 
-Finally, we are interested to see how this impacts individual commercial corridors across Philadelphia. The below map shows decrease of traffic to nightlife establishments along such corridors. While some smaller corridors did not experience much change in traffic or even a small increase in traffic, the majority of corridors saw a large decrease in traffic. This is particularly evident in Center City, along Market Street in West Philadelphia and at the airport in far Southwest Philadelphia. 
-```{r corridor analysis}
+Finally, we review how the changes in mobility to nightlife establishments have impacted individual commercial corridors across Philadelphia in Figure 3.2.3. The below map shows the change in traffic to nightlife establishments aggregated by corridor. While some smaller corridors did not experience much change or even observed small increases in traffic, most corridors saw a drastic decrease in traffic to nightlife establishments. This is particularly evident in Center City, along Market Street in West Philadelphia and at the airport in far Southwest Philadelphia. 
+```{r corridor analysis, echo=TRUE}
 corridors_filter <- phl_corridors %>%
   select(OBJECTID, NAME, GLA, P_DIST, ST_EXT, PT_ADD, VAC_RATE) %>%
   mutate(VAC_RATE = str_remove_all(VAC_RATE, pattern = "%")) %>%
@@ -849,13 +830,14 @@ dat_corr %>%
   geom_sf(aes(fill = Percent_Change, color = Percent_Change, geometry = geometry)) + 
   scale_fill_distiller(palette="RdYlGn", direction = 1) +
   scale_color_distiller(palette="RdYlGn", direction = 1) +
-  labs(title = "Commercial Nighttime Trip % Change, April 2018 & 2020") +
+  labs(title = "Commercial Nighttime Trip % Change, April 2018 & 2020",
+       subtitle = "Figure 3.2.3") +
   mapTheme()
 ```
 
 ## 3.3 Hourly Traffic Volume Across Corridor and Business Category
 
-Next we wanted to understand the hourly traffic patterns of the nightlife establishments and corridor types that we are studying in this project. Figure X.X shows the average daily foot traffic by business type. This graphic indicates that though certain business types are considererd part of the nightlife economy, they do not exclusively experience traffic in the evenings. Restaurants are a good example of this, where the data indicates that the highest levels of traffic occur in the middle of the day. Arts venues, on the other hand, have a clear patterns indicating that they are more popular later in the day.
+Next we wanted to understand the hourly traffic patterns of the nightlife establishments and corridor types that we are studying in this project. Figure 3.3.1 shows the average daily foot traffic by business type. This graphic indicates that though certain business types are considered part of the nightlife economy, they do not exclusively experience traffic in the evenings. Restaurants are a good example of this, where the data indicates that the highest levels of traffic occur in the middle of the day. Arts venues, on the other hand, have a clear patterns indicating that they are more popular later in the day.
 ```{r traffic by nightlife establishment, echo=FALSE}
 #Unnesting popularity by hour variable
 dat_hour <- 
@@ -894,12 +876,11 @@ dat_hour %>%
   ggplot(., aes(x = Hour, y = Count)) + 
   geom_col() +
   labs(title = "Philadelphia Nightlife Organizations, Average Traffic by Hour",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.3.1") +
   facet_wrap(~category, scales = "free") +
   plotTheme()
 ```
 
-The following animation shows restaurant visitor counts by census block group over the course of the day. We observe the highest amount of traffic in center city in the middle of the day and then a resurgence of traffic elsewhere in the city in the evening. This suggests that people dine at neighborhood establishments close to their home in the evening.
 ```{r}
 # dat_restaurants <-
 #   dat_hour %>%
@@ -941,8 +922,6 @@ The following animation shows restaurant visitor counts by census block group ov
 # 
 # animate(restaurant_animation, duration=20, renderer = gifski_renderer())
 ```
-
-The following animation shows the same metric for bars. We observe traffic increasing throughout the day starting in the afternoon.
 ```{r bar animation}
 # #Bar Analysis
 # #Filter Bars
@@ -986,9 +965,8 @@ The following animation shows the same metric for bars. We observe traffic incre
 # animate(bar_animation, duration=20, renderer = gifski_renderer())
 ```
 
-To further understand the role of nightlife for the different corridors across Philadelphia, we examine traffic by time of day for the six different corridor times introduced above. Figure X.X below aggregates the data by corridor type and shows the share of daily traffic. We see that Regional Centers and Superregional Centers, larger corridors that tend to be located closer to Center City demonstrate the highest share of day time traffic between the hours of 6AM and 6PM. This makes sense, as these are the city's major job hubs that attract a large share of the city's day time traffic.  Smaller corridors, such as the Neighborhood Subcetners and Neighborhood Centers, demonstrate a more signficant share of their overall traffic occuring during the early morning and evening hours between 6PM and 6AM. The higher share of evening traffic in these areas suggests that the city's nighttime economy is relatively active in the smaller corridors outside of Center City.
-
-```{r wrangling new hour variables, include=FALSE}
+To further understand the role of nightlife for the different corridors across Philadelphia, we examine traffic by time of day for the six different corridor types introduced above. Figure 3.3.2 below aggregates the data by corridor type and shows the share of daily traffic across different segments of the day. We see that Regional Centers and Superregional Centers, larger corridors that tend to be located closer to Center City demonstrate the highest share of day time traffic between the hours of 6AM and 6PM. This makes sense, as these are the city's major job hubs that attract a large share of the city's day time traffic.  Smaller corridors, such as the Neighborhood Subcenters and Neighborhood Centers, demonstrate a more significant share of their overall traffic occurring during the early morning and evening hours between 6PM and 6AM. The higher share of evening traffic in these areas suggests that the city's nighttime economy is relatively active in the smaller corridors outside of Center City.
+```{r wrangling new hour variables, echo=TRUE}
 dat_1_6 <- dat_hour %>%
   #select trip counts between the hours of 1AM and 6AM
   filter(Hour == "1" | Hour == "2" | Hour == "3" | Hour == "4" | Hour == "5" | Hour == "6") %>% 
@@ -1029,9 +1007,8 @@ dat3 <-
   left_join(dat_workday, by = c('safegraph_place_id', 'date_range_start')) %>%
   st_join(phl_corridors, join = st_intersects) %>%
   st_join(phl_nhoods, join = st_intersects)
-```
 
-```{r echo=FALSE}
+#Visualization
 dat3 %>%
   st_drop_geometry() %>%
   drop_na(corr_type) %>%
@@ -1058,7 +1035,7 @@ dat3 %>%
   coord_flip() +
   scale_fill_viridis_d() +
   labs(title = "Share of Traffic by Time of Day Across Corridor Types",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.3.2") +
   plotTheme() +
   theme(legend.position = "bottom",
         legend.title = element_blank(),
@@ -1067,9 +1044,7 @@ dat3 %>%
   guides(fill = guide_legend(reverse = TRUE))
 ```
 
-The below Figure X.X looks into the daiy traffic patterns in greater detail and breaks out daily traffic pattern by each corridor type and specifically for the traffic to the specific business categories we are studying.  Based on this graphic, Arts Centers in Neighborhood Centers,Specialty Centers, and Superregional Cetners receive the highest share of evening traffic of the groups that we are looking at. It is worth noting that the arts category is our smallest group of business types, so a certain establishment might be skewing these results. 
-
-Restaurants and bars are more evenly split throughout the day. Notably, restaurants in Regional Centers serve the highest share of day time traffic of the six corridor types. It is also clear that bars tend to have higher traffic in the evening than other business types.
+The below Figure 3.3.3 looks into the daily traffic patterns in greater detail and breaks out daily traffic pattern by each corridor type and specifically for the traffic to the specific business categories we are studying.  Based on this graphic, Arts Centers in Neighborhood Centers,Specialty Centers, and Superregional Centers receive the highest share of evening traffic of all corridor types. It is worth noting that the arts category is our smallest group of business types, so a certain establishment might be skewing these results. Restaurants and bars are more evenly split throughout the day. Notably, restaurants in Regional Centers serve the highest share of day time traffic of the six corridor types. It is also clear that bars tend to have higher traffic in the evening than other business types.
 ```{r}
 dat3 %>%
   st_drop_geometry() %>%
@@ -1097,7 +1072,7 @@ dat3 %>%
   coord_flip() +
   scale_fill_viridis_d() +
   labs(title = "Total Daily Traffic Volume by Corridor Type",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.3.3") +
   facet_wrap(~factor(corr_type,levels=c("Neighborhood Subcenter",
                                         "Neighborhood Center",
                                         "Community Center",
@@ -1108,7 +1083,7 @@ dat3 %>%
   plotTheme()
 ```
 
-The below Figure X.X shows that Neighborhood Subcenters and Superregional Centers have the highest shares of traffic between the hours of 7PM and 12AM. Regional Centers, on average, have a substantially lower share of evening traffic at just over 12%. That being said, there is not huge variation amongst the different corridor types indicating that nighttime traffic occurs in many different space and in different corridor types throughout the city.
+The below Figure 3.3.4 shows that Neighborhood Subcenters and Superregional Centers have the highest shares of traffic between the hours of 7PM and 12AM. Regional Centers, on average, have a substantially lower share of evening traffic at just over 12%. That being said, there is not huge variation among the different corridor types indicating that nighttime traffic occurs in many different spaces and in different corridor types throughout the city.
 ```{r bar plot}
 dat3 %>%
   st_drop_geometry() %>%
@@ -1130,7 +1105,7 @@ dat3 %>%
   geom_bar(stat = "identity") + 
   geom_text(aes(label=round(Pct.EveningTrips, digits = 1)), vjust=1.6, color="white", size=3.5)+
   labs(title = "Share of Total Trips that Occur During the Evening Hours by Corridor Type",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.3.4") +
   plotTheme() +
   scale_x_discrete(name ="Corridor Type")+  
   scale_y_continuous(name ="Percent of Trips during Evening")
@@ -1160,15 +1135,14 @@ dat3 %>%
                     aesthetics = "colour",
                     name = "Share of Evening Trips \n(Quintile)") +
   labs(title = "Share of Total Trips that Occur During \nthe Evening Hours (Quintile)",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.4.5") +
   mapTheme() +
   theme(legend.position = "bottom")
 ```
 
-## 3.4 Trip Flows: Origins & destinations
+## 3.4 Trip Flows: Origins & Destinations
 
 One of the fascinating features of the SafeGraph dataset is its ability to capture flows of traffic across space by connecting a series of origins and destinations. By mapping the origins and destinations of trips taking place across Philadelphia, we can observe which regions of the city draw from a larger crowd across the city, and which areas cater to a more local population.
-
 To study these trends in the data, we chose a selection of representative corridors that represented each of the six corridor types and were located within the central core of the city. The selected corridors and corridor type are listed below. Though we only show a subset of the corridors here, this information is available for all Philadelphia commercial corridors on our app.
 
 Corridor Name | Corridor Type
@@ -1181,9 +1155,9 @@ Market East | Superregional Center
 Old City | Specialty Center
 
 
-Figures X.X below shows the volume of visitors to the selected corridors by census block group. [While visitors from across the city frequent East Girard corridor, particularly for its restaurants, Figure X.X clarifies that the corridor mostly caters to a local customer base of surrounding census tracts.] Block groups shaded grey indicate that no resident made a trip to the corridor.
+Figures 3.4.1 below shows the volume of visitors to the selected corridors by census block group. [While visitors from across the city frequent East Girard corridor, particularly for its restaurants, Figure X.X clarifies that the corridor mostly caters to a local customer base of surrounding census tracts.] Block groups shaded grey indicate that no resident made a trip to the corridor.
 
-```{r CBG data wrangling}
+```{r CBG data wrangling, echo=TRUE}
 corr_select <-
   phl_corridors %>%
   filter(NAME == "South Street/16th-21st" | #Neighborhood Subcenter
@@ -1247,8 +1221,8 @@ corr_select_cbg_map %>%
                     aesthetics = c("colour", "fill"),
                     name = "Visitor Count \n(Quintile)") +
   mapTheme() +
-  labs(title = "Where do nightlife visitors come from? (Quintile)",
-       subtitle = "Figure X.X") +
+  labs(title = "Where do nightlife visitors come from?",
+       subtitle = "Figure 3.4.1") +
   facet_wrap(~factor(corr_type, 
                      levels=c("Neighborhood Subcenter",
                               "Neighborhood Center",
@@ -1258,10 +1232,10 @@ corr_select_cbg_map %>%
                               "Specialty Center")))
 ```
 
-Visualizing the origins and destinations in another way, the following maps look at the origins and destinations for trips to restaurants, bars, and arts venues across the city. Specifically, it shows the distance between the centroid of the origin neighborhood to the centroid of the destination commercial corridor. We selected 6 corridors across Philadelphia in different areas of the city that we felt represented a diverse array of commercial corridors in the city. Not that any trips from outside of the city are not included in this graphic.
+Visualizing the origins and destinations in another way, the following maps in Figure 3.4.2 look at the origins and destinations for trips to restaurants, bars, and arts venues across the city. Specifically, it shows the distance between the centroid of the origin neighborhood to the centroid of the destination commercial corridor. We selected 6 corridors across Philadelphia in different areas of the city that we felt represented a diverse array of commercial corridors in the city. Not that any trips from outside of the city are not included in this graphic.
 
-For this graphic we chose six different corridor types located within the Center City District as a representative sample. The graphic demonstrates how traffic flows change across corridor types, with the larger corridors generating far more traffic than neighborhood level corridors. This has important implications for the nighttime economy in Phialdelphia as we know that the corridor types that tend to generate more traffic also see a larger share of this traffic during the day time hours. This suggests that businesses catering to a nighttime crowd are pulling from a smaller subset of the traffic that these larger corridors are seeing.
-```{r flows data wrangling, echo=FALSE}
+For this graphic we chose six different corridor types located within the Center City District as a representative sample. The graphic demonstrates how traffic flows change across corridor types, with the larger corridors generating far more traffic than neighborhood level corridors. This has important implications for the nighttime economy in Philadelphia as we know that the corridor types that tend to generate more traffic also see a larger share of this traffic during the day time hours. This suggests that businesses catering to a nighttime crowd are pulling from a smaller subset of the traffic that these larger corridors are seeing.
+```{r flows data wrangling, echo=TRUE}
 flows <- dat2 %>%
   filter(top_category == "Drinking Places (Alcoholic Beverages)" |
            top_category == "Restaurants and Other Eating Places" |
@@ -1355,6 +1329,12 @@ flows_nhood %>%
            corridor_dest == "Market West" | #Regional Center
            corridor_dest == "Market East" | #Superregional Center
            corridor_dest == "Old City") %>% #Specialty Center
+  mutate(corr_type = case_when(corridor_dest == "South Street/16th-21st" ~ "Neighborhood Subcenter",
+                               corridor_dest == "Fairmount/19th-25th"~ "Neighborhood Center",
+                               corridor_dest == "Central Waterfront/Washington" ~ "Community Center",
+                               corridor_dest == "Market West" ~ "Regional Center",
+                               corridor_dest == "Market East" ~ "Superregional Center",
+                                corridor_dest == "Old City" ~ "Specialty Center")) %>%
   ggplot() + 
   geom_polygon(data = phl_boundary_unproj, aes(x=X, y=Y), fill = "grey40") + 
   geom_segment(aes(x = lat.origin, y = long.origin, xend = lat.dest, yend = long.dest,  
@@ -1366,8 +1346,9 @@ flows_nhood %>%
   scale_color_viridis_c() +
   coord_equal() +
   mapTheme() + 
-  facet_wrap(~corridor_dest, ncol = 3) +
-  labs(title = "Trips")
+  facet_wrap(~corr_type, ncol = 3) +
+  labs(title = "Trip Flows",
+       subtitle = "Figure 3.4.2")
 ```
 
 ## 3.5 Other Exploratory Analysis with SafeGraph Data
@@ -1376,8 +1357,8 @@ The SafeGraph dataset is incredibly rich and there are many more fascinating var
 
 ### Distance from Home
 
-Figures X.X and X.X below visualize SafeGraph "distance_from_home" variable, which takes the average distance travelled from a visitor's home to the point of interest along the corridor. For Figure X.X, we have aggregated this variable by corridor to show that on average, visitors travel farther to Center Center and corridors close to the city's border. Smaller corridors throughout the city draw more local visitors that travel shorter distances. One possible explanation for this pattern could be the presence of job hubs. With jobs concentrated in Center City and a handful of other centers, such as the airport in Southwest Philadelphia and the Navy Yard in South Phialdelphia, this could indicate that the people are willing to travel relatively long distances to these corridors. Another possible explanation for this pattern could be the connectivity of these corridors. The commercial corridors in Center City are well-served by public transit and the corridors located close to the city's border, particularly around South Philly are well connected to the interstate network, facilitating car travel to these destinations. Finally, tourism could play a role in the aggreggated distance from home variable. Most of the city's tourist-friendly attractions are located in the city core, so visitors from outside of Philadelphia could be skewing this variable higher.
-```{r echo=FALSE}
+Figures 3.5.1 and 3.5.2 below visualize SafeGraph "distance_from_home" variable, which takes the average distance traveled from a visitor's home to the point of interest along the corridor. For Figure 3.5.1, we have aggregated this variable by corridor to show that on average, visitors travel farther to Center Center and corridors close to the city's border. Smaller corridors throughout the city draw more local visitors that travel shorter distances. One possible explanation for this pattern could be the presence of job hubs. With jobs concentrated in Center City and a handful of other centers, such as the airport in Southwest Philadelphia and the Navy Yard in South Philadelphia, this could indicate that the people are willing to travel relatively long distances to these corridors. Another possible explanation for this pattern could be the connectivity of these corridors. The commercial corridors in Center City are well-served by public transit and the corridors located close to the city's border, particularly around South Philly are well connected to the interstate network, facilitating car travel to these destinations. Finally, tourism could play a role in the aggregated distance from home variable. Most of the city's tourist-friendly attractions are located in the city core, so visitors from outside of Philadelphia could be skewing this variable higher.
+```{r echo=TRUE}
 dat3 %>%
   drop_na(NAME.y) %>%
   group_by(NAME.y) %>%
@@ -1393,13 +1374,13 @@ dat3 %>%
                     aesthetics = c("colour", "fill"),
                     name = "Distance from Home (Quintile)") +
   labs(title = "Distance from Home (Quintile)",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 3.5.1") +
   mapTheme() +
   theme(legend.position = "bottom")
 ```
 
-Looking at the same variable across the corridor tyeps, we see that the Regional, Superregional, and Specialty Centers have a substantially higher average distance travelled corridor at 6.4, 14.8 and 9.7 miles respectively. Neighborhood Subcenters have the smallest distance from home value, suggesting that, on average, this corridor type appeals to a more local crowd.
-```{r echo=FALSE}
+Looking at the same variable across the corridor types, Figure 3.5.2 demonstrates that the Regional, Superregional, and Specialty Centers have a substantially higher average distance traveled corridor at 6.4, 14.8 and 9.7 miles respectively. Neighborhood Subcenters have the smallest distance from home value, suggesting that, on average, this corridor type appeals to a more local crowd.
+```{r echo=TRUE}
 #Barplots
 dat3 %>%
   st_drop_geometry() %>%
@@ -1418,24 +1399,25 @@ dat3 %>%
                                           "Superregional Center",
                                           "Specialty Center")))) + 
   geom_bar(stat="identity") +
-  labs(title = "Distance from Home (miles)",
-       subtitle = "Figure X.X") +
   # facet_wrap(~corr_type) +
   guides(fill=guide_legend(title=NULL)) +
-  theme(axis.title.x = element_blank()) +
-  geom_text(aes(label=round(Avg_Distance_mi, digits = 1)), vjust=1.6, color="white", size=3.5)+
-  plotTheme() 
+  coord_flip()+
+  theme(axis.title.y = element_blank()) +
+  geom_text(aes(label=round(Avg_Distance_mi, digits = 1)), hjust=1.6, color="white", size=3.5) +
+  labs(title = "Distance from Home by Corridor Type",
+       subtitle = "Figure 3.5.2",
+       y = "Average Distance (miles)") +
+  plotTheme()
 ```
 
 ### Median Dwell Time
 
-Another variable unique to the SafeGraph dataset is the median_dwell variable which aggregates the median amount of time spent by all visitors at a given point of interest. While we do not see as clear of a spatial pattern in the map as we did with the above distance_from_home variable, the bar plot in Figure X.X below indicates that Neighborhood Subcenters have the highest median dwell time at over 45 minutes, while Community Centers have the lowest. As Community Centers tend to be auto-oriented and suburban style commercial centers, these corridors may be optimized for convenience and, therefore, encourage visitors to spend less time.
+Another variable unique to the SafeGraph dataset is the median_dwell variable which aggregates the median amount of time spent by all visitors at a given point of interest. While we do not see as clear of a spatial pattern in the map as we did with the above distance_from_home variable (Figure 3.5.3), the bar plot in Figure 3.5.4 below indicates that Neighborhood Subcenters have the highest median dwell time at over 45 minutes, while Community Centers have the lowest. As Community Centers tend to be auto-oriented and suburban style commercial centers, these corridors may be optimized for convenience and, therefore, encourage visitors to spend less time.
 
 Applying this finding to the nighttime economy, establishments that are integral to the nighttime economy tend to benefit when visitors spend a longer time at the establishment. For example, at bars and restaurants, the longer a patron spends at the establishment, the more likely they are to purchase additional items, translating to increased business revenue. This could have implications for 
 
 This could suggest that businesses located in Community Centers are less likely to cater to those seeking out arts, entertainment and culture. It could also mean that something about the environment in Community Centers encourages people to spend less time at individual business.
-```{r echo=FALSE}
-#Fix axes!
+```{r echo=TRUE}
 dat3 %>%  
   drop_na(NAME.y, corr_type) %>%
   group_by(NAME.y) %>%
@@ -1445,13 +1427,16 @@ dat3 %>%
   left_join(., phl_corridors) %>%
   st_as_sf() %>%
   ggplot() +
-  geom_sf(data = phl_boundary, fill = "grey60", color = "transparent") +
-  geom_sf(aes(fill = q5(median_dwell)), color = "transparent") +
+  geom_sf(data = phl_boundary, fill = "grey80", color = "grey40") +
+  geom_sf(aes(fill = q5(median_dwell), color = q5(median_dwell))) +
   scale_fill_manual(values = palette5,
                     aesthetics = c("colour", "fill"),
                     name = "Median Dwell \n(Quintile)") +
-  labs(title = "Median Dwell (Quintile)",
-       subtitle = "Figure X.X") +
+  scale_color_manual(values = palette5,
+                    aesthetics = c("colour", "fill"),
+                    name = "Median Dwell \n(Quintile)") +
+  labs(title = "Median Dwell Times by Philadelphia Commercial Corridor",
+       subtitle = "Figure 3.5.3") +
   mapTheme()
 
 #Barplots
@@ -1473,10 +1458,13 @@ dat3 %>%
                                           "Specialty Center")))) + 
   geom_bar(stat="identity") +
   scale_fill_viridis_d() +
-  labs(title = "Median Dwell by Establishment and Corridor Type (Minutes)",
-       subtitle = "Figure X.X") +
-  geom_text(aes(label=round(Dwell, digits = 1)), vjust=1.6, color="white", size=3.5)+
+  labs(title = "Median Dwell Times by Corridor Type",
+       subtitle = "Figure 3.5.4",
+       x = "Median Dwell Time (minutes)") +
+  geom_text(aes(label=round(Dwell, digits = 1)), hjust=1.6, color="white", size=3.5)+
   guides(fill=guide_legend(title=NULL)) +
+  theme(axis.title.y = element_blank()) +
+  coord_flip()+
   plotTheme()
 ```
 
@@ -1486,19 +1474,21 @@ The SafeGraph dataset is incredibly rich and the above analysis merely demonstra
 
 # 4 Predictive Model
 
-Informed by the above exploratory analysis, the following section discusses how we developed a predictive model by explaining the features that we ultimately chose for the model, the modelling approach, and an evaluation of our error terms.
+Informed by the above exploratory analysis, the following section discusses how we developed a model to predict nighttime traffic between the hours of 7PM and 12PM to commercial corridors in Philadelphia. We begin by explaining the features that we ultimately chose for the model, describe the modelling approach, and walk through an evaluation of our error terms.
 
 ## 4.1 Feature Summary
 
-Our model predicts the number of trips between the hours of 7PM and 12AM to Philadelphia commercial corridors. After and extensive and iterative process of data wrangling, we ended up with three main categories of variables.
+As mentioned above, the ultimate output of the model will be a prediction of trips to commercial corridors during evening hours. This raw trip count by corridor needed to be normalized by corridor area, to account for differently sized corridors. This variable, however, was highly skewed and would be difficult to model. Therefore, we ultimately used the log transformation of the normalized trip count as our dependent variable for the model.
 
-* *SafeGraph Features*: These features are entirely sourced from the SafeGraph dataset. They help describe the denity of certain business types along a certain corridor, a measure of retail mix, the distance home and dwell time (explore further in the above Section 3), and how late businesses are open.
+Our independent variables at we use to predict the nighttime trip outcome were developed over an iterative process of data wrangling, feature engineering, and evaluation. Our final list falls into three primary categories described below.
+
+* *SafeGraph Features*: These features are entirely sourced from the SafeGraph dataset. They help describe the density of certain business types along a certain corridor, a measure of retail mix, the distance home and dwell time (explore further in the above Section 3), and how late businesses are open.
 
 * *Built environment Features*: These features are sourced from local datasets maintained on Open Data Philly and describe the built environment of the corridor. They include information on distance to transit, parks, and average building size.
 
 * *Demographic Features*: These features are sourced from U.S. Census data and describe socio-economic characteristics of a corridor.
 
-```{r loading in prediction data, message=FALSE, warning=FALSE, include=FALSE}
+```{r loading in prediction data, echo=TRUE, message=FALSE, warning=FALSE}
 #SafeGraph Features
 # bar.sf <- dat2 %>%
 #   filter(top_category == "Drinking Places (Alcoholic Beverages)") %>%
@@ -1837,6 +1827,35 @@ dat_pred_agg <-
 ```
 
 The below is a final list of variables as well as a brief description of each.
+
+Feature Name | Category | Source | Description
+-------------|----------|--------|------------
+Night_visits_sqmi_log | Dependent Variable | SafeGraph | Log transformation of trip count between the hours of 7PM and 12AM normalized by area
+phl_building_size_log | Built Environment | [X] | Log transformation of average building footprint (sq ft) on commercial corridor
+phl_UPenn | Built Environment | SafeGraph | Distance to the University of Pennsylvania
+sg_distance_home_log | SafeGraph | SafeGraph | Log transformation of average distance traveled to a point of interest aggregated to the commercial corridor 
+sg_dwell | SafeGraph | SafeGraph | Median dwell time of points of interested aggregated to the corridor level
+count_bars_a_log | SafeGraph | SafeGraph | Log transformation of bar density variable
+count_rest_a_log | SafeGraph | SafeGraph | Log transformation of restaurant density variable
+count_arts_a_log | SafeGraph | SafeGraph | Log transformation of arts venue density variable
+count_grocery_a_log | SafeGraph | SafeGraph | Log transformation of grocery density variable
+count_sports_a | SafeGraph | SafeGraph | Log transformation of sports establishment density variable
+count_retailmix_top | SafeGraph | SafeGraph | Count of unique business top categories
+count_retailmix_sub_log | SafeGraph | SafeGraph | Log transformation of count of unique business subcategories
+count_openlate_log | SafeGraph | SafeGraph | Log transformation of businesses open after 8PM based on open_hours variable
+nn_transit_log | Built Environment | [X] | Log transformation of distance to nearest 2 SEPTA stations
+nn_parks_log | Built Environment | [X] | Log transformation of distance to nearest 4 parks 
+nn_trolley | Built Environment | [X] | Distance to nearest 4 trolley stations
+count_late_tag | SafeGraph | SafeGraph | Count of businesses with "late" tag
+corr_type | Built Environment | [x] | Corridor typology (see detailed description above)
+count_late_log | SafeGraph | SafeGraph | Log transformation of count of businesses with "late" tag
+demo_pctWhite | Demographic | 2018 ACS 5-Year Estimates | Percent of residents in corresponding census tract that are white
+demo_medAge | Demographic | 2018 ACS 5-Year Estimates | Median Age of residents in corresponding census tract
+demo_popdens | Demographic | 2018 ACS 5-Year Estimates | Population density of corresponding census tract
+demo_medrent | Demographic | 2018 ACS 5-Year Estimates | Median rent of corresponding census tract
+demo_MHI | Demographic | 2018 ACS 5-Year Estimates | Median household income of corresponding census tract
+
+In Figure 4.1.1 below, we see a corrplot display of the final features chosen for the model. There is some collinearity among the variables that describe the density of business types. While this is not ideal for modelling, including these variables were necessary for the ultimate application of this model as a tool to predict nighttime traffic based on different retail mix scenarios. In order to adjust the retail mix for certain nighttime establishments (bars, restaurants, and arts venues) a variable representing each of these factors needed to be present in the final model. Other variables, though they may have exhibited some degree of collinearity are present in the model because they were ultimately statistically significant.
 ```{r echo=FALSE}
 reg.vars <- c('Night_visits_sqmi_log',
               'phl_building_size_log',
@@ -1863,11 +1882,6 @@ reg.vars <- c('Night_visits_sqmi_log',
               'demo_medrent',
               'demo_MHI')
 
-reg.vars
-```
-
-In Figure X.X below, we see a corrplot display of the final features chosen for the model. There is some collinearity among the variables that describe the density of business types. While this is not ideal for modelling, including these variables were necessary for the ultimate application of this model as a tool to predict nighttime traffic based on different retail mix scenarios. In order to adjust the retail mix for certain nighttime estabishments (bars, restaurants, and arts venues) a variable representing each of these factors needed to be present in the final model. Other variables, though they may have exhibited some degree of collinearity are present in the model because they were ultimately statistically significant.
-```{r echo=FALSE}
 numericVars <- dat_pred_agg %>% select(reg.vars) %>% st_drop_geometry() %>% select_if(., is.numeric)
 
 ggcorrplot(
@@ -1878,7 +1892,7 @@ ggcorrplot(
   insig = "blank") +  
   plotTheme()+
   labs(title = "Correlation across numeric variables",
-       subtitle = "Figure X.X") 
+       subtitle = "Figure 4.1.1") 
 ```
 
 ## 4.2 Model Building
@@ -1908,7 +1922,7 @@ reg1 <-
 summary(reg1)
 ```
 
-Figure X.X below compares the predictions and the actual values across the training and the test sets. While the predicted value (the green line) lines up fairly well with the actual value (orange line), the scatterplot indicates a fair amount of variance. Additionally, there are some intense outliers across both the training and the test set that the model is predicting quite poorly.
+Figure 4.2.1 below compares the predictions and the actual values across the training and the test sets. While the predicted value (the green line) lines up fairly well with the actual value (orange line), the scatter plot indicates a fair amount of variance. Additionally, there are some intense outliers across both the training and the test set that the model is predicting quite poorly.
 ```{r pred actual scatterplot, out.width = "100%"}
 reg1_predict <- exp(predict(reg1, newdata = phl.test))
 
@@ -1934,14 +1948,14 @@ ggplot(preds, aes(x = pred, y = actual, color = source)) +
   labs(title = "Comparing predictions to actual values",
        x = "Predicted Value",
        y = "Actual Value",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 4.2.1") +
   theme(
     legend.position = "none"
   )
 ```
 
-We also ran a k-fold cross validation test to view the distribution of errors. The MAE for each fold are plotted in the below Figure X.X. 
-```{r, out.width = "100%"}
+We also ran a k-fold cross validation test to view the distribution of errors. The MAE for each fold are plotted in the below Figure 4.2.2. 
+```{r echo=TRUE}
 #Figure out how to exponentiate this.
 
 fitControl <- trainControl(method = "cv", 
@@ -1965,14 +1979,14 @@ ErrorHist <-
   ggplot(reg1.cv.resample, aes(x=MAE)) + 
   geom_histogram(color = "grey40", fill = "#27fdf5", bins = 50) + 
   labs(title="Linear Model: Histogram of Mean Absolute Error Across 100 Folds",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 4.2.2") +
   plotTheme()
 
 ErrorHist
 ```
 
-Finally, we map the errors by commercial corridor in the following figures. The absolute errors indicate that our model is less accurate predicting nighttime traffic for larger, more heavily-trafficked corridors. The Percent Errors map on the right, actually tells a slightly different story with the highest quintile of percent error along the smaller corridors throughout the city. 
-```{r, out.width = "100%"}
+We also map the errors by commercial corridor in the following figures. The absolute errors indicate that our model is less accurate predicting nighttime traffic for larger, more heavily-trafficked corridors. The Percent Errors map on the right, actually tells a slightly different story with the highest quintile of percent error along the smaller corridors throughout the city. 
+```{r echo=TRUE}
 cv_preds <- reg1.cv$pred
 
 map_preds <- dat_pred_agg %>% 
@@ -1996,7 +2010,7 @@ ErrorPlot1 <- ggplot() +
                       name="Quintile\nBreaks") +
   labs(title="Absolute Errors",
        subtitle = "Night Visit Predictions",
-       caption = "Figure X.X") +
+       caption = "Figure 4.2.3a") +
   mapTheme()
 
 ErrorPlot2 <- ggplot() +
@@ -2010,14 +2024,14 @@ ErrorPlot2 <- ggplot() +
                       name="Quintile\nBreaks") +
   labs(title="Percent Errors",
        subtitle = "Night Visit Predictions",
-       caption = "Figure X.X") +
+       caption = "Figure 4.2.3a") +
   mapTheme()
 
 grid.arrange(ErrorPlot1, ErrorPlot2, ncol=2)
 ```
 
 Finally the following tables summarize the error terms by corridor type. We acknowledge that the linear is most accurate at predicting traffic for the Neighborhood Center and the Community Centers with an average percent error of about 25%. The model is substantially worse at predicting traffic along Regional Centers and Superregional Centers, where the error terms indicate that the model's average error is about 50%. Not only is the linear model highly inaccurate, but it is not generalizable across corridors. 
-```{r echo=FALSE}
+```{r echo=TRUE}
 #Comparing errors by corr type
 map_preds_corr <- 
   map_preds %>%
@@ -2042,7 +2056,7 @@ map_preds_corr[order(factor(map_preds_corr$corr_type,
 ```
 
 We also look at the errors for the linear model across months in the following table. The MAPE remains high across all months, but is particularly high during the winter months of January, February and December.
-```{r echo=FALSE}
+```{r echo=TRUE}
 #Errors by date
 dat_pred_agg %>% 
   rowid_to_column(var = "rowIndex") %>% 
@@ -2060,7 +2074,8 @@ dat_pred_agg %>%
             MAPE = mean(MAPE)) %>% 
   st_drop_geometry() %>%
   dplyr::select(date_range_start, MAE, MAPE) %>%
-  dplyr:: mutate(date_range_start = as.date(date_range_start)) %>%
+  mutate(date_range_start = str_remove_all(date_range_start, pattern = "T05:00:00Z"),
+         date_range_start = str_remove_all(date_range_start, pattern = "T04:00:00Z")) %>%
   kable(caption = "Errors by Corridor Type") %>%
   kable_styling()
 
@@ -2069,7 +2084,7 @@ dat_pred_agg %>%
 ### Random Forest Model
 
 As discussed above, the linear model has a number of issues with accuracy and generalizability. In an effort to improve these metrics, we built a random forest model using the same features and dependent variable. In the below summary table, we see much improvement in the random forest model's OOB Error of about 20%, down from about 40% in the linear model. Additionally, the adjusted R-squared value has increased from .5 to .7. This indicates that the model's accuracy has improved.
-```{r ranger}
+```{r ranger, echo=TRUE}
 set.seed(414)
 inTrain <- createDataPartition(y=dat_pred_agg$Night_visits_sqmi_log, p = .60, list = FALSE)
 
@@ -2151,7 +2166,7 @@ rf_val_fit_time$.workflow
 
 ### Feature Importance
 
-The below Figure X.X is a bar plot showing the final random forest model's relative feature importance. The features ranked more highly were more important predictors for nighttime traffic along commercial corridors, while features ranked lower were less important predictors. A more extensive discussion of the feature importance of this model is included in below in Section 5.
+The below Figure 4.2.4 is a bar plot showing the final random forest model's relative feature importance. The features ranked more highly were more important predictors for nighttime traffic along commercial corridors, while features ranked lower were less important predictors. A more extensive discussion of the feature importance of this model is included in below in Section 5.
 ```{r echo=FALSE}
 rf_val_fit_time %>% 
   pluck(".workflow", 1) %>%   
@@ -2159,10 +2174,10 @@ rf_val_fit_time %>%
   vip(num_features = 23) +
   plotTheme() +
   labs(title = "Random Forest Model Feature Importance", 
-         subtitle = "Figure X.X")
+         subtitle = "Figure 4.2.4")
 ```
 
-Using a similar workflow to evaluate the random forest model errors, the following graphic shows a scatter plot comparing the actual and predicted values between the training and test sets of data. There is less overlap between the green and orange lines than in the analogous plot for the linear model, which suggests that the model could be better calibrated to align the predicted and actual values. However, the distribution of the predictions, indicated by the more normalized clustering of the dots across both datasets, indicates that the random forest model is an improvement over the previous iteration. There are still outliers in both the testing and training datasets that indicate the model has trouble coping with particlarly high values. Again, further calibration and including additional features to account for these high counts would further improve the model's accuracy.
+Using a similar workflow to evaluate the random forest model errors, the following graphic shows a scatter plot comparing the actual and predicted values between the training and test sets of data. There is less overlap between the green and orange lines than in the analogous plot for the linear model, which suggests that the model could be better calibrated to align the predicted and actual values. However, the distribution of the predictions, indicated by the more normalized clustering of the dots across both datasets, indicates that the random forest model is an improvement over the previous iteration. There are still outliers in both the testing and training datasets that indicate the model has trouble coping with particularly high values. Again, further calibration and including additional features to account for these high counts would further improve the model's accuracy.
 ```{r echo=FALSE}
 rf1_predict.train_fit <- predict(rf_val_fit_time$.workflow, new_data = st_drop_geometry(phl.training.rf_fit))
 rf1_predict.train_fit <- exp(rf1_predict.train_fit %>% as.data.frame())
@@ -2192,14 +2207,14 @@ ggplot(preds.rf_fit, aes(x = .pred, y = actual, color = source)) +
   labs(title = "Comparing predictions to actual values - Random Forest Model",
        x = "Predicted Value",
        y = "Actual Value",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 4.2.5") +
   theme(
     legend.position = "none"
   )
 ```
 
 Comparing the error terms of the test sets between the Linear Model and the tuned Random Forest Model, we see that the latter is substantially more accurate than the linear model with a mean absolute percent error down to 17% from 40%.
-```{r echo=FALSE}
+```{r echo=TRUE}
 phl.test_table <-
   phl.test %>%
   st_drop_geometry() %>%
@@ -2225,8 +2240,8 @@ rbind(phl.test.rf_table, phl.test_table) %>%
   kable(caption = "MAE and MAPE for Test Set Data") %>% kable_styling()
 ```
 
-We also compare the two models's MAE with the below histogram across the 10 folds. We can see that the error terms cluster lower than the errors from the lienar model and are also more concentrated. This further demonstrates an imporvement over the linear model's generalizability. **CHECK CODE ON THIS ONE**
-```{r echo=FALSE}
+We also compare the two model's MAE with the below histogram across the 10 folds. We can see that the error terms cluster lower than the errors from the linear model and are also more concentrated. This further demonstrates an improvement over the linear model's generalizability. 
+```{r echo=TRUE}
 set.seed(414)
 folds <- vfold_cv(dat_pred_agg, v = 10)
 # folds2 <- vfold_cv(dat_pred_agg, v = 3159)
@@ -2255,7 +2270,7 @@ rbind(reg1.cv.resample %>%
   ggplot(aes(x=MAE)) + 
   geom_histogram(color = "grey40", fill = "#27fdf5", bins = 50) + 
   labs(title="Full Dataset: Histogram of Mean Absolute Error Across 10 Folds",
-       subtitle = "Figure X.X") +
+       subtitle = "Figure 4.2.6") +
   facet_wrap(~Regression, ncol = 1) +
   scale_x_continuous(name = "Mean Absolute Error") +
   scale_y_continuous(name = "Count") +
@@ -2284,9 +2299,9 @@ map_preds_rf %>%
             MAPE = mean(MAPE)) %>%
   st_drop_geometry() %>%
   dplyr::select(date_range_start, MAE, MAPE) %>%
-  mutate(date_range_start = as.date(date_range_start)) %>%
-  # mutate(date_range_start = str_remove_all(date_range_start, pattern = "T05:00:00Z"),
-  #        date_range_start = str_remove_all(date_range_start, pattern = "T04:00:00Z")) %>%
+  # mutate(date_range_start = as.numeric(as.date(date_range_start))) %>%
+  mutate(date_range_start = str_remove_all(date_range_start, pattern = "T05:00:00Z"),
+         date_range_start = str_remove_all(date_range_start, pattern = "T04:00:00Z")) %>%
   kable(caption = "Random Forest Model: Errors by Month") %>%
   kable_styling()
 ```
@@ -2312,14 +2327,14 @@ map_preds_corr_rf[order(factor(map_preds_corr_rf$corr_type,
                                        "Regional Center",
                                        "Superregional Center",
                                        "Specialty Center"))),] %>%
-  kable(caption = "Random Foreset Model: Errors by Corridor Type") %>%
+  kable(caption = "Random Forest Model: Errors by Corridor Type") %>%
   kable_styling()
 ```
 
 ### Mapping Errors
 
-As a final evaluation of the random foresst model, we map the errors across Philadelphia commercial corridors in the below Figures X.X and X.X. The map on the left shows the highest quintile of aboslute error tends to occur in smaller corridors. There is a particular cluster in far West Philadelphia and the area north of Center City. When reviewing the Percent Error metric on the right, the best predictions are concentrated in Center City, likely because these corridors see more traffic overall.
-```{r echo=FALSE}
+As a final evaluation of the random forest model, we map the errors across Philadelphia commercial corridors in the below Figures X.X and X.X. The map on the left shows the highest quintile of absolute error tends to occur in smaller corridors. There is a particular cluster in far West Philadelphia and the area north of Center City. When reviewing the Percent Error metric on the right, the best predictions are concentrated in Center City, likely because these corridors see more traffic overall.
+```{r echo=TRUE}
 map_preds_space <-
   map_preds_rf %>%
   dplyr::mutate(Visits.AbsError = round(abs(exp(.pred) - Night_visits_sqmi),2),
@@ -2363,7 +2378,7 @@ grid.arrange(ErrorPlot1, ErrorPlot2, ncol=2)
 
 ## 4.3 Workday Model
 
-Finally, we were curious to see if our model could predict traffic during other times of day. Using the same fetures, we ran an additional linear model and random forest model predicting *workday traffic* between the hours of 9AM and 6PM. While we were not concerned with evaluating the errors with the same rigor that we did above, we compared the MAE and MAPE to the other models we built. From this comparison we see that the workday model is far less accurate than both the nighttime models with a MAPE's as high as over 125%. 
+Finally, we were curious to see if our model could predict traffic during other times of day. Using the same features, we ran an additional linear model and random forest model predicting *workday traffic* between the hours of 9AM and 6PM. While we were not concerned with evaluating the errors with the same rigor that we did above, we compared the MAE and MAPE to the other models we built. From this comparison we see that the workday model is far less accurate than both the nighttime models with a MAPE's as high as over 125%. 
 ```{r}
 ##Linear Workday Model
 set.seed(414)
@@ -2446,7 +2461,7 @@ rbind(phl.test.rf_table, phl.test_table, phl.test.day_table, phl.test.rf.day_tab
   kable(caption = "MAE and MAPE for Test Set Data") %>% kable_styling()
 ```
 
-This suggests that the factors determining workday traffic are distinct from the factors determining evening traffic. There does, however, seem to be some overlap in the significant features of the two models. The below summary table from the linear model shows that a number of variables are still statistically signficant, including the density of restaurants, retail mix, adn even if businesses are open late. Surprisingly, the distance to University of Pennsylvania, a signficant job hub witin Philadelphia, is not a signficant predictor. This is possibly due to the fact that the university is situated within a residential area in West Philadelphia. While the university itself may attract a fair amount of day time traffic, the surrounding areas might not. Other variables that are not similarly signficant between the nighttime and workday models include many of the demographic variables, such as percent white, median age, and population density.
+This suggests that the factors determining workday traffic are distinct from the factors determining evening traffic. There does, however, seem to be some overlap in the significant features of the two models. The below summary table from the linear model shows that a number of variables are still statistically significant, including the density of restaurants, retail mix, and even if businesses are open late. Surprisingly, the distance to University of Pennsylvania, a significant job hub within Philadelphia, is not a significant predictor. This is possibly due to the fact that the university is situated within a residential area in West Philadelphia. While the university itself may attract a fair amount of day time traffic, the surrounding areas might not. Other variables that are not similarly significant between the nighttime and workday models include many of the demographic variables, such as percent white, median age, and population density.
 
 ```{r}
 summary(reg1.day)
@@ -2454,47 +2469,43 @@ summary(reg1.day)
 
 # 5. Findings & Discussion
 
-While the model requires additional calibration, the model sheds light on research findings that have important implications for the governance of the nighttime economy in Philadelphia and perhaps in other cities as well. The following section discusses these findings in greater detail and hypothesizes on relevant policy implications.
+This model sheds light on research findings that have important implications for the governance of the nighttime economy in Philadelphia and perhaps in other cities as well. The following section discusses these findings in greater detail and hypothesizes on relevant policy implications.
 
 ## 5.1 Important Predictors of Nighttime Traffic
 
-According to our final model, the following predictors were most important to estimating nightime traffic:
+According to our final model, the following predictors were some of the most important in estimating nighttime traffic. A discussion of these features is included below.
 
 * Density of Restaurants
 * Density of Businesses Open Late
 * Average distance home
 * Average dwell time
-* Population density
+* Retail Mix
 
-The density of restaurants is a substantially more significant predictor of nighttime traffic along commercial corridors than other features. In terms of an economic development takeaway, this suggests that restaurants and food service are important generators of the nighttime economy and that creating and environment that is friendly to these types of establishments can lead to additional traffic along commercial corridors in Philadelphia. This finding is also signficant within the context of COVID-19, as we have seen that restaurant operations have been severely hampered during this difficult year. This suggests that prioritziing restaurants during this economic recovery stage could have a spillover effect into recovering other retail establishments in Philadelphia.
+The density of restaurants is, by far, the most significant predictor of nighttime traffic than the other features. In terms of an economic development takeaway, this suggests that restaurants and food service are important generators of evening activity that contribute to the nighttime economy. This also suggests that creating and sustaining an environment that is friendly to these businesses will be beneficial to the larger eocnomic health of local commercial corridors. This finding is also significant within the context of COVID-19, as we have seen that restaurant operations have been severely hampered during this difficult year. This model suggests that prioritizing restaurant recovery in the post-COVID era should be prioritized, as this could have a spillover effect for other retail types in Philadelphia.
 
-Perhaps unsurprisingly, the density of businesses open late is also an important predictor in the model. While this rather expected in predicting nighttime traffic, this has interesting policy implications in terms of licensing along commercial corridors. To encourage increased participation in the nighttime economy, this finding suggests that faciliating businesses staying open later can lead to increased traffic to commercial corridors. To help businesses bounce back from the pandemic, facilitating businesses staying open later may be another strategy to aid in the economic recovery effort after COVID-19. Certain businesses have time restrictions on the services they can provide late into the night, and easing these restrictions may be an effective way to generate economic activity in the nighttime sector. While negative externalities still need to be considered, this finding suggest that there are economic benefits to keeping businesses open late.
+The density of businesses open late is also an important predictor in the model. While this may be unsurprising when predicting nighttime traffic, this has interesting policy implications in terms of licensing and permitting along commercial corridors. Faciliating businesses staying open later may be another strategy for policymakers to take into consideration when promoting eocnomic recovery. This is particularly relevant to businesses that have highly regulated hours, such as bars and arts venues. Of course, the negative externalities of increased traffic in the evening should be considered carefully. That said, easing the restrictions on certain business types may encourage increased nighttime traffic along local corridors.
 
-The distance from home and dwell time variables derived from the SafeGraph dataset were also strong predictors of nighttime traffic. This is notable as these are new variables that we have not had access to before the SafeGraph dataset and it appears that there are signficant relationships between these variables and mobility. Therefore, this highlights how this new dataset can be revolutionary in how we understand urban moblility patterns. Reviewing the coefficients of the linear model, we see that distance from home has a negative relationship with nighttime visits, suggesting that as nighttime visits go up, the distance home goes down. This suggests that people are more likely to travel shorter distances later in the evening. On the contrary, the linear model also indicates that the dwell time feature has a positive relationship with nighttime visits, meaning that as nighttime visits go up, people are likely to spend longer at a given establishment. These features provide an interesting insight into the behavior of visitors to establishments during nighttime hours. Visitors are willing to spend longer at an establishment, but are not likely to travel as far. In terms of a policy takeaway from this finding, local corridors close to residential areas of the neighborhood may be important sites to focus efforts to revive the nighttime economy. Additionally, visitors seem willing to spend longer at establishments during the evening hours, so helping restaurants and bars accommodate visitors comfortably (e.g. expanding seating and encouraging businesses to make nighttime destinations comforrtable) may be a viable strategy for increasing business revenue.
+The distance from home and dwell time variables derived from the SafeGraph dataset were also strong predictors of nighttime traffic. These are new variables that we did not have access to before the SafeGraph dataset showing how this new dataset is an important development in our ability to understand mobility patterns. Reviewing the coefficients of the linear model, we see that the distance from home has a negative relationship with nighttime visits, meaning that as the average distance travelled increases the number of nighttime trips goes down. This suggests that people are more likely to travel shorter distances later in the evening, meaning that local, neighborhood corridors that are near a visitors home are an important site of the nightlife economy. The dwell time variable, in contrast, has a positive relationship with nighttime visits. This means that as the average dwell time on a corridor increases, so does the number of trips. In terms of a policy takeaway from this finding, helping nightlife establishments accommodate visitors comfortably (e.g. expanding seating area in and around nightlife destinations) may be a viable strategy for increasing traffic and thereby growing business revenue.
 
-Possibly related to the distance home variable is the population density feature pulled from the U.S. Census. Per the above analysis, distance from home is negatively correlated with nighttime visits, suggesting that people tend to travel short distances during the evening hours. The importance of the population variable here also makes sense as area that census tracts with a higher density of residents means that more people are nearby in the evening hours to frequent local establishments. 
-
-Finally, retail mix is another important predictor of nighttime trips, suggesting that the more retail diversity along a corridor, the more traffic it attracts during nighttime hours. This makes instutitive sense, as more retail options along a corridor allow it to cater to a wider group of people, but it also suggests that corridors that are successful generators of the nighttime economy may actually be most successful if the cater to daytime traffic as well and are able to host a mix of uses, not just those that we specifically associate with the nighttime economy. If nighttime establishments do best along places with a diverse mix of retail, some that we are assuming is not open late, this proposes interesting new planning challenges of how to allow corridors to feel both safe and active when some of the businesses have closed for the evening.
+Finally, retail mix is another important predictor of nighttime trips, suggesting that the more retail diversity along a corridor, the more traffic it attracts during nighttime hours. This makes intuitive sense, as more business types along a corridor allow it to attract a wider audience. It also suggests that the most successful corridors at generating nighttime traffic cater to a wide variety of businesses, including those during the daytime. If nighttime establishments do best along places with a diverse mix of retail, some of which we are assuming is not open late, this proposes interesting new planning challenges involving how to plan for a corridor that moves between daytime and nighttime. For example, how can a corridor feel both safe and inviting when some of the businesses have closed for the evening, leaving storefronts unactiviated during the course of the evening?
 
 ## 5.2 Less Important Predictors of Nighttime Traffic
 
-Conversely, the features that were lesss important predictors have generated equally interesting findings and implications for economic development. We will primarily discuss the 3 features listed below and highlighted in the below Figure X.X.
+Conversely, the features that were less important predictors have generated equally interesting findings and implications for economic development. We will primarily discuss the 3 features listed below and highlighted in the below Figure X.X.
 
 * Corridor Type
 * Bar Density
 * Arts Density
 
-Though certain corridor types were statistically signficant to our linear regression -- notably the Regional, Superregional, and Specialty Centers -- the variable overall was less important to our random forest model. There are a number of possibilities for why this is the case. For starters, though the corridor categories describe a specific type of retail environment, there may be extensive variation within each corridor typology. For example, there are over a hundred Neighborhood Subcenters across the entire city. The same is true for Neighborhood Centers. While the corridor typology might be useful for describing the other corridor types, of which the ultiamte count is much lower, this may simply be too broad a category to adequately describe these corridor types.
+Though certain corridor types were statistically significant to our linear regression -- notably the Regional, Superregional, and Specialty Centers -- the variable overall was less important to our random forest model. There are a number of possibilities for why this is the case. For starters, though the corridor categories describe a specific type of retail environment, there is likely extensive variation within each corridor typology. There are over a hundred Neighborhood Subcenters across the entire city. The same is true for Neighborhood Centers. While the corridor typology might be useful for describing the other corridor types, of which the ultimate count is much lower, this may simply be too broad a category to adequately describe these corridor types.
 
-In particular, given our research on the nighttime economy, we were surprised to see that arts esstablishments and bars ranked particularly low in terms of feature importance. These two features were also not statistically signficant to the linear model, but we included in the model anyways for reasons related to the app described above. There are a number of reasons that could contribute to these feature's lack of importance in the model. For one, there seems to be some collinearity with some of the other variables descrbing the density of retail establishments (see Figure X.X above), meaning that they match the pattern of another feature and therefore do not contribute new information to the model. Another possibility for the lack of importance could be related to the hours that we are predicting. The model specifically looks at trips between the hours of 7PM and 12AM - it is possible that a nubmer of late night trips to bars and arts establishmetns are falling outside of this time window.
+In particular, given our research on the nighttime economy, we were surprised to see that arts establishments and bars ranked particularly low in terms of feature importance. These two features were also not statistically significant to the linear model, but we included in the model anyways for reasons related to the app described above. There could be a number of reasons contributing to these feature's lack of importance in the model. For one, there seems to be some collinearity with some of the other variables describing the density of retail establishments, meaning that they match the pattern of another feature and therefore do not contribute new information to the model. Another possibility for the lack of importance could be related to the hours that we are predicting. The model specifically looks at trips between the hours of 7PM and 12AM - it is possible that a number of late night trips to bars and arts establishments are falling outside of this time window. There may be an additional problem with predicting traffic to arts venues, as the trips to these destinations are almost entirely reliant on programming (same with the density of sports venues which also ranks low in terms of importance). This abnormality is difficult to model and is likely one of the factors accounting for the feature's relatively weak performance. 
 
-There may be an additional problem with prediciting traffic to arts venues, as the trips to these destinations are almost entirely reliant on programming (same with the density of sports venues which also ranks low in terms of importance). This abnormality is difficult to model and is likely one of the factors accounting for the feature's relatively weak performance. 
+Though the features representing bars and arts venues were not important to our final model, this is not to say that these establishments are unimportant to the nightlife economy more broadly. From a quantitative perspective, we discuss in the above section that a diverse retail mix along a corridor is positively correlated with nightlife traffic and an important factor in predicting these patterns. Bars and arts venues undoubtedly contribute to a commercial corridor's retail diversity and add to its vibrancy and mix of uses. Separately, though our project has modeled mobility as a proxy for economic importance, an establishment's economic viability may not be the only or primary rationale for supporting these business types. Even if an arts venue does not attract regular traffic to a commercial corridor, this does not mean that we should not invest in the existence of these establishment. They enrich our lives and enhance the character along a corridor, and few would argue that this is not worthy of our support. This simply means that the arguments to support these places may not be exclusively economic one. Rather, it relies on the social and cultural benefits of these establishments.
 
-Though the features representing bars and arts venues were not important to our final model, this is not to say that these establishments are unimportant to the nightlife economy. From a quantitative perspective, we discuss in the above section that a diverse retail mix along a corridor is positively correlated with nightlife traffic and an important factor in predicting these patterns. Bars and arts venues undboutedly contribute to a commercial corridor's retail diversity and add to its vibrancy and mix of uses. Separately, though our project has modeled mobility as a proxy for economic importance, an establishments economic viability may not be the only rationale for supporting these business types along a corridor. Even if an arts venue does not attract regular traffic to a commercial corridor, this does not mean that we should not invest in the existence of these places. They enrich our lives and enhance the character along a corridor, and few would argue that this is not worthy of our support. This simply means that the arguments to support these places may not be exclusively economic one. Rather, it relies on the social and cultural benefits of these establishments.
+## 5.3 Limited Generalizability 
 
-## 5.3 Limited generalizabiliity 
-
-Finally, the above analysis indicates that the model does not predict nighttime traffic with equivalent accuracy across time and and corridor type. Looking first at the generalizability across time, the model is best at predicting values during the spring and summer. In particular, the model's most accurate predictions occur durring March, May, June, and July where the MAPE is as low as 11%. In contrast, the predictions over the winter months is far less accurate, with the December prediction having a MAPE of over 100% and the January and February predictiosn having a MAPE of over 50%. These errors are likely due to far lower evening traffic counts during these months as shown in the below Figure X.X. It is possible that the discrepancy between evening traffic during these months is an error in the data, but it is also possible that it correlates with weather and hours of day light. As the winter months are darker and colder, people may be less likely to participate in the nighttiime economy activities during those months.
+Finally, the above analysis indicates that the model does not predict nighttime traffic with equivalent accuracy across time and and corridor type. Looking first at the generalizability across time, the model is best at predicting values during the spring and summer. In particular, the model's most accurate predictions occur during March, May, June, and July where the MAPE is as low as 11%. In contrast, the predictions over the winter months is far less accurate, with the December prediction having a MAPE of over 100% and the January and February predictions having a MAPE of over 50%. These errors are likely due to far lower evening traffic counts during these months as shown in the below Figure X.X. It is possible that the discrepancy between evening traffic during these months is an error in the data, but it is also possible that it correlates with weather and hours of day light. As the winter months are darker and colder, people may be less likely to participate in the nighttime economy activities during those months.
 
 ```{r}
 dat3 %>% 
@@ -2505,18 +2516,15 @@ dat3 %>%
   ggplot(aes(x = date_range_start, y = Evening_Hours)) +
   geom_col() +
   plotTheme()
-
 ```
 
-Another limitation in the data's generalizability is across corridor types. As discussed in the above section 4.2 on feature importance, the corridor types may be useful adminstrative tools for the City of Philadelphia, but they might not be descriptvie enough for modelling purposes, particularly for the smaller Neighborhood Subcenters and Centers that have the highest errors in our model. There may simply be too much variation within these administrative categories to guarantee accuracy
+Another limitation in the model's generalizability is across corridor types. As discussed in the above Section 4.2 on feature importance, the corridor types may be useful administrative tools for the City of Philadelphia, but they might not be descriptive enough for modelling purposes, particularly for the smaller Neighborhood Subcenters and Centers that have the highest errors in our model. There may simply be too much variation within these administrative categories to guarantee accuracy
 
 # 6. Conclusions & Opportunities for Continued Research
 
-While this project has only scratched the surface of the SafeGraph data possibilities, we have generated a interesting set of findings about nighttime traffic to Philadelphia commercial corridors through our exploratory data analysis and model buidling process. These findings are particularly relevant to the city's economic development efforts recovering from the COVID-19 pandemic. 
+While this project has only scratched the surface of the possibilities of the SafeGraph dataset, we have generated learnings that are relevant to the city's economic development efforts, particularly during the COVID-19 recovery. This analysis and research has also contributed to a data dashboard that summarizes socio-economic information about the many commercial corridors across Philadelphia and shows visitors origins to commercial corridors across the city. We hope this tool will be a valuable empirical device for Philadelphia's corridor managers and economic development officials who have a vested interest in exploring the benefits of the nighttime economy at the corridor level. Separately, the app also puts our predictive model into use. Showcasing a selection of corridors across Philadelphia, our prototype allows users to manipulate the retail mix of nightlife establishments along a given corridor and see the impact on nighttime traffic. 
 
-This work has also contributed to an app that functions as a data dashboard to summarize socio-economic information about the many commercial corridors across Philadelphia and demonstrate where visitors travel from to visit corridors across the city. We hope this tool will be a valuable empirical device for corridor managers and eocnomic development officials across Philadelphia who have a vested interst in exploring the benefits of the nighttime economy at the corridor level. Separately, the app also puts our predictive model into use. Showcasing a selection of corridors across Philadlephia, our allows users to manipulate the retail mix of nightlife establishments along a given corridor and see the impact on nighttime traffic. 
-
-There are many other iterations of the model that could enhance our understanding of the nighttime economy and improve the models accuracy. For one, we could further refine the hours when we are predicting trips. Instead of predicing between the hours of 7PM and 12PM, we could extend the boundaries of this variable to encompass hours into the early morning to get a more comprehensive view of traffic that occurs over the course of the entire night. The model could also incorporate multiple years of SafeGraph data to build a more robust picture of mobility along nightlife corridors. Finally, the model could be extended to other cities, which would expand the sample size, hopefully improving the model's accuracy and extending the findings to other cities that are interested in fostering their nighttime economy. 
+There are many other iterations of the model that could enhance our understanding of the nighttime economy and improve the model's accuracy. For one, we could further refine the hours when we are predicting trips. Instead of predicting between the hours of 7PM and 12PM, we could extend the boundaries of this variable to encompass the early morning. This would likely provide a more comprehensive view of traffic that occurs over the course of the entire night. The model could also incorporate multiple years of SafeGraph data to build a more robust picture of mobility along nightlife corridors. Finally, the model could be extended to other cities, which would expand the sample size, hopefully improving the model's accuracy and extending the findings to other cities that have a vested interest in fostering their local nighttime economy. 
 
 # 7. Code Appendix
 
